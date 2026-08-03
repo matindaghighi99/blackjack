@@ -28,9 +28,11 @@ Provide a clean, modular, production-ready **foundation** for a blackjack game:
 
 ## 📸 Screenshots
 
-> Screenshots are captured from the Unity editor once the UI GameObjects are assembled
-> (see [Getting Started](#-getting-started)). Drop PNGs into `docs/screenshots/` using the
-> filenames below and they'll appear here.
+<p align="center">
+  <img src="docs/screenshots/gameplay.gif" alt="Gameplay preview — Main Menu, Game Table, Store" width="320">
+</p>
+
+<p align="center"><sub>Animated preview cycling the three core screens. UI concept mockups.</sub></p>
 
 | Main Menu | Game Table | Store |
 | :---: | :---: | :---: |
