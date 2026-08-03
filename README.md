@@ -1,5 +1,11 @@
 # 🂡 Social Casino Blackjack
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Unity](https://img.shields.io/badge/Unity-6000.0%20LTS-000000?logo=unity&logoColor=white)](https://unity.com/releases/lts)
+[![C#](https://img.shields.io/badge/C%23-.NET%20Standard%202.1-239120?logo=csharp&logoColor=white)](https://learn.microsoft.com/dotnet/csharp/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-1793D1)](#)
+
 A cross-platform (iOS + Android) **social casino** blackjack game built with **Unity** and
 **C#**, backed by a lightweight **Node.js / Express** stub API.
 
