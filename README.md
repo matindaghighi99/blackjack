@@ -34,10 +34,8 @@ Provide a clean, modular, production-ready **foundation** for a blackjack game:
 
 | Main Menu | Game Table | Store |
 | :---: | :---: | :---: |
-| ![Main Menu](docs/screenshots/main-menu.png) | ![Game Table](docs/screenshots/game-table.png) | ![Store](docs/screenshots/store.png) |
+| ![Main Menu](docs/screenshots/main-menu.png) | _🔜 coming soon_ | ![Store](docs/screenshots/store.png) |
 | Play · Store · Daily Rewards | Hit / Stand / Double / Split | Mock chip packs |
-
-_Placeholders until captures are added._
 
 ---
 
