@@ -20,6 +20,21 @@ Provide a clean, modular, production-ready **foundation** for a blackjack game:
 
 ---
 
+## 📸 Screenshots
+
+> Screenshots are captured from the Unity editor once the UI GameObjects are assembled
+> (see [Getting Started](#-getting-started)). Drop PNGs into `docs/screenshots/` using the
+> filenames below and they'll appear here.
+
+| Main Menu | Game Table | Store |
+| :---: | :---: | :---: |
+| ![Main Menu](docs/screenshots/main-menu.png) | ![Game Table](docs/screenshots/game-table.png) | ![Store](docs/screenshots/store.png) |
+| Play · Store · Daily Rewards | Hit / Stand / Double / Split | Mock chip packs |
+
+_Placeholders until captures are added._
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer          | Technology                                  |
