@@ -169,4 +169,4 @@ integrity.
 
 ## 📄 License
 
-Prototype / educational scaffold. Add a license before distribution.
+Released under the [MIT License](LICENSE).
