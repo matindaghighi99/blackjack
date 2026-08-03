@@ -7,9 +7,11 @@ using UnityEngine.UI;
 namespace BlackjackGame.UI.Screens
 {
     /// <summary>
-    /// Mock store screen. Spawns a button per chip pack from EconomyConfig. Purchases are
-    /// simulated (no real billing) — see <see cref="StoreManager"/> for the TODO to wire
-    /// real IAP before release.
+    /// Store screen. Spawns a button per chip pack from EconomyConfig and drives the real
+    /// IAP flow via <see cref="StoreManager"/>. Purchases are asynchronous: tapping a pack
+    /// kicks off the platform billing flow and the result arrives on
+    /// <see cref="StoreManager.OnPurchaseCompleted"/> (chips are only granted after the
+    /// receipt is validated).
     /// </summary>
     public sealed class StoreUI : MonoBehaviour
     {
@@ -26,24 +28,44 @@ namespace BlackjackGame.UI.Screens
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
 
+        private StoreManager _store;
+
         private void Start()
         {
             if (_backButton != null)
                 _backButton.onClick.AddListener(() =>
                     UnityEngine.SceneManagement.SceneManager.LoadScene(SceneNames.MainMenu));
 
+            if (!AppManager.Exists)
+            {
+                SetStatus("Store unavailable (start from Main Menu).");
+                return;
+            }
+
+            _store = AppManager.Instance.Store;
+            _store.OnPurchaseCompleted += HandlePurchaseCompleted;
+            _store.OnStoreReady += HandleStoreReady;
+            AppManager.Instance.Chips.OnBalanceChanged += _ => RefreshBalance();
+
             BuildPackList();
             RefreshBalance();
+            SetStatus(_store.IsReady ? "" : "Connecting to store…");
+        }
 
-            if (AppManager.Exists)
-                AppManager.Instance.Chips.OnBalanceChanged += _ => RefreshBalance();
+        private void OnDestroy()
+        {
+            if (_store != null)
+            {
+                _store.OnPurchaseCompleted -= HandlePurchaseCompleted;
+                _store.OnStoreReady -= HandleStoreReady;
+            }
         }
 
         private void BuildPackList()
         {
-            if (!AppManager.Exists || _packListRoot == null || _packButtonPrefab == null) return;
+            if (_packListRoot == null || _packButtonPrefab == null) return;
 
-            foreach (ChipPack pack in AppManager.Instance.Store.AvailablePacks)
+            foreach (ChipPack pack in _store.AvailablePacks)
             {
                 ChipPack captured = pack; // avoid closure capture bug
                 Button button = Instantiate(_packButtonPrefab, _packListRoot);
@@ -60,15 +82,27 @@ namespace BlackjackGame.UI.Screens
 
         private void Purchase(string packId)
         {
-            PurchaseResult result = AppManager.Instance.Store.PurchasePack(packId);
-            if (_statusLabel != null) _statusLabel.text = result.Message;
+            SetStatus("Processing purchase…");
+            _store.PurchasePack(packId); // result arrives via OnPurchaseCompleted
+        }
+
+        private void HandlePurchaseCompleted(PurchaseResult result)
+        {
+            SetStatus(result.Message);
             RefreshBalance();
         }
+
+        private void HandleStoreReady() => SetStatus("");
 
         private void RefreshBalance()
         {
             if (_balanceLabel != null && AppManager.Exists)
                 _balanceLabel.text = $"Balance: {AppManager.Instance.Chips.Balance:N0}";
+        }
+
+        private void SetStatus(string message)
+        {
+            if (_statusLabel != null) _statusLabel.text = message;
         }
     }
 }

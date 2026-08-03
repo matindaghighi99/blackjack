@@ -179,7 +179,7 @@ integrity.
 
 ## 🗺️ Roadmap / TODO
 
-- [ ] Real IAP (Unity IAP / StoreKit / Google Play Billing) with receipt validation.
+- [x] Real IAP (Unity IAP / StoreKit / Google Play Billing) with receipt validation. — see [docs/IAP.md](docs/IAP.md)
 - [ ] Real authentication (Firebase Auth / JWT) replacing the placeholder.
 - [ ] Server-authoritative shuffles + balance to prevent cheating.
 - [ ] Card art, table prefabs, and animations.

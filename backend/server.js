@@ -17,6 +17,7 @@ const morgan = require('morgan');
 const db = require('./config/db');
 const playerRoutes = require('./routes/playerRoutes');
 const authRoutes = require('./routes/authRoutes');
+const iapRoutes = require('./routes/iapRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,7 @@ app.get('/', (_req, res) => {
 // ---- Routes ----
 app.use('/api/auth', authRoutes);
 app.use('/api/players', playerRoutes);
+app.use('/api/iap', iapRoutes);
 
 // ---- 404 + error handling ----
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));

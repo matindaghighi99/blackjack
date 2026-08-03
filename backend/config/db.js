@@ -7,9 +7,11 @@
  */
 
 const players = new Map(); // playerId -> player object
+const processedTransactions = new Set(); // store transaction ids already validated (anti-replay)
 
 module.exports = {
   players,
+  processedTransactions,
 
   /** Seeds one demo player so the endpoints return data out of the box. */
   seed() {

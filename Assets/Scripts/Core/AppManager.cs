@@ -1,6 +1,7 @@
 using BlackjackGame.Blackjack.Rules;
 using BlackjackGame.Config;
 using BlackjackGame.Economy;
+using BlackjackGame.Economy.IAP;
 using BlackjackGame.Player;
 using BlackjackGame.Utils;
 using UnityEngine;
@@ -44,7 +45,7 @@ namespace BlackjackGame.Core
             Profile = PlayerProfile.LoadOrCreate(_economyConfig.StartingChips);
             Chips = new ChipManager(Profile);
             Rewards = new RewardSystem(_economyConfig, Profile, Chips);
-            Store = new StoreManager(_economyConfig, Chips);
+            Store = new StoreManager(_economyConfig, Chips, CreatePurchaseService());
 
             Debug.Log($"[AppManager] Booted. Player {Profile.Data.DisplayName} with {Chips.Balance:N0} chips.");
         }
@@ -57,6 +58,29 @@ namespace BlackjackGame.Core
                 RuleVariant.European => new EuropeanRules(),
                 _ => new ClassicRules()
             };
+        }
+
+        /// <summary>
+        /// Chooses the billing backend: real Unity IAP on device (when the package is
+        /// installed), a mock everywhere else (editor / no package) so the store is always
+        /// testable. Receipts are validated server-side unless disabled in EconomyConfig.
+        /// </summary>
+        private IPurchaseService CreatePurchaseService()
+        {
+#if UNITY_PURCHASING && !UNITY_EDITOR
+            IReceiptValidator validator = _economyConfig.UseServerReceiptValidation
+                ? new BackendReceiptValidator(_economyConfig.BackendBaseUrl, () => Profile.Data.PlayerId)
+                : (IReceiptValidator)new NoOpReceiptValidator();
+            return new UnityIapService(validator);
+#else
+            return new MockPurchaseService();
+#endif
+        }
+
+        protected override void OnDestroy()
+        {
+            Store?.Dispose();
+            base.OnDestroy();
         }
     }
 }

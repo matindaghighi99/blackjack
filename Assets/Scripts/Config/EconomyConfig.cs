@@ -32,7 +32,15 @@ namespace BlackjackGame.Config
         [Tooltip("Hours that must pass before the next daily reward can be claimed.")]
         [Min(1)] public int DailyRewardCooldownHours = 20;
 
-        [Header("Store (mock chip packs)")]
+        [Header("IAP / Receipt Validation")]
+        [Tooltip("Base URL of the backend used for server-side receipt validation.")]
+        public string BackendBaseUrl = "http://localhost:3000";
+
+        [Tooltip("When true (recommended), receipts are validated server-side via the backend. " +
+                 "When false, purchases are accepted without server validation (dev only).")]
+        public bool UseServerReceiptValidation = true;
+
+        [Header("Store — chip packs (Id doubles as the store product id)")]
         public ChipPack[] ChipPacks =
         {
             new ChipPack { Id = "pack_small",  DisplayName = "Handful",  ChipAmount = 10000,  BonusChips = 0,     PriceLabel = "$1.99" },
