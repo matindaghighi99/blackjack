@@ -472,10 +472,9 @@ def main():
         w += 1
 
     # Nine-sliced frames. ".bN" tells the importer the sprite border.
-    save(gold_frame_panel(320, 180, 46, FILL_GREEN), "btn_green.b56")
-    save(gold_frame_panel(320, 180, 46, FILL_BLUE), "btn_blue.b56")
-    save(gold_frame_panel(320, 180, 46, FILL_RED), "btn_red.b56")
-    save(gold_frame_panel(320, 180, 46, FILL_DARK), "btn_dark.b56")
+    # btn_* frames are no longer drawn here — they are built from the concept render's
+    # own gold border by art-source/extract_table_art.py, which looks considerably
+    # better. gold_frame_panel still backs the pill and panel below.
     save(gold_frame_panel(320, 200, 34, FILL_DARK, border=7, fill_alpha=210), "panel.b48")
     save(gold_frame_panel(320, 120, 58, FILL_DARK, border=7), "pill.b58")
 

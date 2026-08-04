@@ -22,9 +22,10 @@ Output:
     Assets/Art/UI/icon_hit|stand|double|split.png
 """
 
+import colorsys
 import os
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -56,8 +57,9 @@ DYNAMIC = [
 ]
 
 # The STAND button, used as the template for the live action buttons.
-BUTTON_TEMPLATE = (274, 1094, 493, 1264)
-BUTTON_INTERIOR = (300, 1116, 468, 1242)
+BUTTON_TEMPLATE = (277, 1097, 490, 1261)
+# Must cover the icon AND the label; a tighter box left "STAND" ghosting through.
+BUTTON_INTERIOR = (292, 1107, 475, 1252)
 
 def _boundary_mean(region, hole_box, band=14):
     """Average colour of a ring just outside the hole."""
@@ -164,6 +166,46 @@ def build_background(src):
     return out
 
 
+def button_frame(src_frame, tint, inset=20, bottom_inset=6, radius=22):
+    """
+    Builds a button by keeping the render's gold border and painting a fresh interior.
+
+    Recolouring the existing interior does not work: the interior first has to be
+    inpainted to remove the STAND icon and label, and diffusion seeds that fill from the
+    surrounding ring — which is the gold border — so the "dark fill" comes out gold.
+    Replacing the interior wholesale sidesteps that and gives a predictable result in
+    any colour.
+    """
+    w, h = src_frame.size
+    out = src_frame.copy()
+
+    # The bottom inset is much smaller than the sides: the render's label sits low in
+    # the button and a symmetric inset leaves "STAND" showing through every variant.
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [inset, inset, w - 1 - inset, h - 1 - bottom_inset], radius=radius, fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(2))
+
+    top = tuple(min(255, int(c * 2.0) + 10) for c in tint)
+    bottom = tuple(max(0, int(c * 0.72)) for c in tint)
+    strip = Image.new("RGB", (1, h))
+    for y in range(h):
+        t = y / max(1, h - 1)
+        strip.putpixel((0, y), tuple(
+            int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
+    grad = strip.resize((w, h), Image.BILINEAR).convert("RGBA")
+
+    out.paste(grad, (0, 0), mask)
+
+    # Soft sheen across the upper third, as on the render's own buttons.
+    sheen = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(sheen).ellipse([-w * 0.2, -h * 0.55, w * 1.2, h * 0.5], fill=64)
+    sheen = ImageChops.multiply(sheen.filter(ImageFilter.GaussianBlur(10)), mask)
+    out.paste(Image.new("RGBA", (w, h), (255, 250, 226, 255)), (0, 0), sheen)
+
+    return out
+
+
 def cut(src, box, out_path, resize=None):
     piece = src.crop(box).convert("RGBA")
     if resize:
@@ -192,14 +234,6 @@ def main():
 
     # The button frame itself: crop the STAND button, then diffuse away its icon and
     # label so only the gold frame and dark fill remain. Nine-sliced in Unity.
-    frame = src.crop(BUTTON_TEMPLATE).convert("RGB")
-    ox, oy = BUTTON_TEMPLATE[0], BUTTON_TEMPLATE[1]
-    inner = (BUTTON_INTERIOR[0] - ox, BUTTON_INTERIOR[1] - oy,
-             BUTTON_INTERIOR[2] - ox, BUTTON_INTERIOR[3] - oy)
-    frame = inpaint_diffuse(frame, [inner], iterations=45, radius=12, pad=18)
-    frame.convert("RGBA").save(os.path.join(UI_DIR, "btn_action.b46.png"))
-    print(f"  Assets/Art/UI/btn_action.b46.png  {frame.size}")
-
     # Action button icons — cropped tight from each button face.
     for name, box in (
         ("icon_hit",    (98, 1112, 210, 1210)),
@@ -208,6 +242,18 @@ def main():
         ("icon_split",  (800, 1112, 912, 1210)),
     ):
         cut(src, box, os.path.join(UI_DIR, f"{name}.png"))
+
+    # Menu button frames, recoloured from the render's own action-button frame so the
+    # menu and the table share one treatment. Only the dark interior is shifted; gold
+    # pixels are detected and left alone, which is what keeps the metal looking like metal.
+    raw = src.crop(BUTTON_TEMPLATE).convert("RGBA")
+    for name, tint in (("btn_action", (13, 33, 18)),
+                       ("btn_green", (14, 40, 19)),
+                       ("btn_blue", (10, 24, 40)),
+                       ("btn_red", (44, 12, 14)),
+                       ("btn_dark", (10, 18, 15))):
+        button_frame(raw, tint).save(os.path.join(UI_DIR, f"{name}.b46.png"))
+        print(f"  Assets/Art/UI/{name}.b46.png")
 
     # Back arrow, lifted from the store render's top bar.
     store = Image.open(os.path.join(ROOT, "docs", "screenshots", "store.png")).convert("RGB")

@@ -10,7 +10,7 @@ be regenerated at any resolution by changing CARD_W / CARD_H below.
 
 Output:
     Assets/Art/Cards/card_<Suit>_<01..13>.png   52 faces, Suit matching the C# enum
-    Assets/Art/Cards/card_Back.png              card back
+    (card_Back.png comes from extract_table_art.py, not this script)
     Assets/Art/Table/Felt.png                   table background
 """
 
@@ -39,14 +39,20 @@ FONT_BOLD = "/usr/local/lib/python3.10/dist-packages/matplotlib/mpl-data/fonts/t
 
 # Suit order must match BlackjackGame.Blackjack.Cards.Suit
 SUITS = ["Clubs", "Diamonds", "Hearts", "Spades"]
-RED = (198, 40, 40)
-BLACK = (33, 33, 33)
+# Ink deepened to sit on warm stock; pure red/black looked garish against ivory.
+RED = (176, 32, 38)
+BLACK = (28, 28, 32)
 SUIT_COLOR = {"Clubs": BLACK, "Spades": BLACK, "Hearts": RED, "Diamonds": RED}
 
 RANK_LABEL = {1: "A", 11: "J", 12: "Q", 13: "K"}
 
-FACE_BG = (252, 252, 250)
-FACE_EDGE = (206, 206, 200)
+# Stock sampled from the rendered cards in docs/screenshots/game-table.png (#F5E6BF).
+# It is a warm ivory, not white — that single change does most of the work in making
+# the drawn cards sit alongside the painted ones in the render.
+FACE_TOP = (250, 241, 212)
+FACE_BOT = (238, 221, 178)
+FACE_EDGE = (191, 168, 122)
+GOLD_LINE = (176, 141, 74)
 
 BACK_BG = (24, 54, 96)
 BACK_ACCENT = (72, 116, 178)
@@ -156,14 +162,49 @@ def draw_rounded(d, box, radius, fill, outline=None, width=1):
     d.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
 
+def card_plate(w, h):
+    """
+    The blank card: ivory stock with a vertical gradient, a warm edge and a soft inner
+    vignette so the face is not dead flat.
+    """
+    plate = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+
+    grad = Image.new("RGB", (1, h))
+    for y in range(h):
+        t = y / max(1, h - 1)
+        grad.putpixel((0, y), tuple(
+            int(FACE_TOP[i] + (FACE_BOT[i] - FACE_TOP[i]) * t) for i in range(3)))
+    grad = grad.resize((w, h), Image.BILINEAR).convert("RGBA")
+
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, w - 1, h - 1], radius=CORNER_R * SS, fill=255)
+    plate.paste(grad, (0, 0), mask)
+
+    # Edge vignette: darken a band just inside the border.
+    vig = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(vig).rounded_rectangle(
+        [0, 0, w - 1, h - 1], radius=CORNER_R * SS, fill=255)
+    inner = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(inner).rounded_rectangle(
+        [10 * SS, 10 * SS, w - 1 - 10 * SS, h - 1 - 10 * SS],
+        radius=(CORNER_R - 6) * SS, fill=255)
+    ring = Image.composite(vig, Image.new("L", (w, h), 0),
+                           inner.point(lambda v: 255 - v))
+    ring = ring.filter(ImageFilter.GaussianBlur(6 * SS))
+    plate.paste(Image.new("RGBA", (w, h), (120, 96, 52, 60)), (0, 0), ring)
+
+    d = ImageDraw.Draw(plate)
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=CORNER_R * SS,
+                        outline=FACE_EDGE, width=max(1, 2 * SS))
+    return plate
+
+
 def make_card(suit, rank):
     w, h = CARD_W * SS, CARD_H * SS
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    img = card_plate(w, h)
     d = ImageDraw.Draw(img)
     color = SUIT_COLOR[suit]
-
-    draw_rounded(d, [0, 0, w - 1, h - 1], CORNER_R * SS,
-                 fill=FACE_BG, outline=FACE_EDGE, width=max(1, 2 * SS))
 
     label = RANK_LABEL.get(rank, str(rank))
 
@@ -188,9 +229,13 @@ def make_card(suit, rank):
         draw_pip(d, suit, w / 2, h / 2, 92 * SS, color)
     else:
         # Court cards: a clean monogram panel rather than fake royal artwork.
-        pad_x, pad_y = int(w * 0.20), int(h * 0.175)
-        draw_rounded(d, [pad_x, pad_y, w - pad_x, h - pad_y], 18 * SS,
-                     fill=None, outline=color, width=max(1, 3 * SS))
+        pad_x, pad_y = int(w * 0.19), int(h * 0.165)
+        # Double gold rule around the monogram, echoing the render's court borders.
+        draw_rounded(d, [pad_x, pad_y, w - pad_x, h - pad_y], 20 * SS,
+                     fill=None, outline=GOLD_LINE, width=max(1, 3 * SS))
+        draw_rounded(d, [pad_x + 6 * SS, pad_y + 6 * SS,
+                         w - pad_x - 6 * SS, h - pad_y - 6 * SS], 15 * SS,
+                     fill=None, outline=color, width=max(1, 2 * SS))
         court_font = load_font(int(150 * SS))
         bb = d.textbbox((0, 0), label, font=court_font)
         d.text((w / 2 - (bb[2] - bb[0]) / 2 - bb[0], h * 0.5 - (bb[3] - bb[1]) / 2 - bb[1] - 22 * SS),
@@ -293,7 +338,10 @@ def main():
                 os.path.join(CARDS_DIR, f"card_{suit}_{rank:02d}.png"))
             count += 1
 
-    make_back().save(os.path.join(CARDS_DIR, "card_Back.png"))
+    # NOTE: card_Back.png is deliberately NOT written here. The gold filigree back is
+    # lifted from the concept render by extract_table_art.py, which looks far better than
+    # the drawn one — and whichever script ran last used to win, silently.
+    # make_back() is kept as the fallback design if that render ever goes away.
     make_felt().save(os.path.join(TABLE_DIR, "Felt.png"))
 
     print(f"Wrote {count} card faces + back to {CARDS_DIR}")

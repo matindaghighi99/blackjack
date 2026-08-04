@@ -713,6 +713,15 @@ namespace BlackjackGame.EditorTools
             // chip_stack was first written to Assets/Art/Table; it belongs with the kit.
             if (AssetDatabase.DeleteAsset("Assets/Art/Table/chip_stack.png")) removed++;
 
+            // The drawn ".b56" button frames were superseded by ".b46" frames built from
+            // the concept render. Both matching would make UiSprite's lookup ambiguous.
+            foreach (string guid in AssetDatabase.FindAssets("btn_ t:Texture2D", new[] { UiArtFolder }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (Path.GetFileName(path).Contains(".b56."))
+                    if (AssetDatabase.DeleteAsset(path)) removed++;
+            }
+
             if (removed > 0)
                 Debug.Log($"[SceneBootstrap] Removed {removed} obsolete sprite(s).");
         }

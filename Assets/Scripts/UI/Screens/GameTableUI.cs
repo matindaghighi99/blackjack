@@ -48,6 +48,13 @@ namespace BlackjackGame.UI.Screens
 
         private GameManager _game;
 
+        /// <summary>
+        /// The engine instance the views were last drawn for. GameManager builds a fresh
+        /// engine per round, so a change here means "new round" — which is when the hands
+        /// need clearing so the next Render deals the cards in rather than snapping them.
+        /// </summary>
+        private BlackjackEngine _renderedEngine;
+
         private void Start()
         {
             _game = GameManager.Instance;
@@ -128,6 +135,13 @@ namespace BlackjackGame.UI.Screens
 
         private void RenderHands(BlackjackEngine engine)
         {
+            if (!ReferenceEquals(engine, _renderedEngine))
+            {
+                if (_dealerHandView != null) _dealerHandView.Clear();
+                if (_playerHandView != null) _playerHandView.Clear();
+                _renderedEngine = engine;
+            }
+
             // While the player is still acting the hole card stays face down, and the
             // dealer total shown is only what the player can actually see. Showing the
             // real total here would leak the hidden card.

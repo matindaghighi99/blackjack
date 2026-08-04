@@ -59,6 +59,25 @@ namespace BlackjackGame.PlayTests
             return null;
         }
 
+        /// <summary>
+        /// Waits until every hand has finished dealing and flipping, with a frame budget
+        /// so a stuck animation fails the test rather than hanging the run.
+        /// </summary>
+        private static IEnumerator WaitForCards(params HandView[] views)
+        {
+            for (int frame = 0; frame < 600; frame++)
+            {
+                bool busy = false;
+                foreach (HandView view in views)
+                    if (view != null && view.IsAnimating) busy = true;
+
+                if (!busy) yield break;
+                yield return null;
+            }
+
+            Assert.Fail("Card animations did not settle within 600 frames.");
+        }
+
         /// <summary>Boots the app the way a player would, and guarantees a spendable balance.</summary>
         private static IEnumerator BootFromMainMenu()
         {
@@ -130,6 +149,10 @@ namespace BlackjackGame.PlayTests
             // Cards must actually be drawn, not just held in the engine.
             var dealerCards = FindUI<HandView>("DealerHandView");
             var playerCards = FindUI<HandView>("PlayerHandView");
+
+            // Cards are dealt in and turned over with animation, so wait for them to
+            // settle before reading sprites — otherwise the assertions race the flip.
+            yield return WaitForCards(dealerCards, playerCards);
             Assert.AreEqual(2, playerCards.VisibleCardCount, "Player's cards were not rendered.");
             Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount,
                 "Dealer's cards were not rendered.");
@@ -157,6 +180,7 @@ namespace BlackjackGame.PlayTests
                     FindUI<Button>("HitButton").onClick.Invoke();
                     yield return null;
                     Assert.AreEqual(before + 1, game.Engine.PlayerHands[0].Cards.Count, "Hit drew no card.");
+                    yield return WaitForCards(dealerCards, playerCards);
                 }
 
                 Button stand = FindUI<Button>("StandButton");
@@ -174,6 +198,7 @@ namespace BlackjackGame.PlayTests
             }
 
             Assert.AreEqual(RoundPhase.Settled, game.Engine.Phase, "Round never settled.");
+            yield return WaitForCards(dealerCards, playerCards);
 
             var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
             Assert.IsTrue(long.TryParse(balanceLabel.text.Replace(",", ""), out long shownBalance),

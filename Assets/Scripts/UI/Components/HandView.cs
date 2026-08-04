@@ -46,8 +46,48 @@ namespace BlackjackGame.UI.Components
         [Range(0f, 8f)]
         [SerializeField] private float _jitterDegrees = 2.2f;
 
+        [Header("Motion")]
+        [Tooltip("Where new cards fly in from, relative to the hand — the dealing shoe.")]
+        [SerializeField] private Vector2 _dealFrom = new Vector2(520f, 620f);
+        [Tooltip("Seconds for a card to travel from the shoe to its place.")]
+        [SerializeField] private float _dealDuration = 0.26f;
+        [Tooltip("Delay between consecutive cards in the same deal.")]
+        [SerializeField] private float _dealStagger = 0.09f;
+        [Tooltip("Seconds for a card to turn over when it is revealed.")]
+        [SerializeField] private float _flipDuration = 0.24f;
+
         private readonly List<Image> _pool = new List<Image>();
         private readonly List<Image> _shadows = new List<Image>();
+        private readonly List<CardMotion> _motion = new List<CardMotion>();
+
+        /// <summary>Per-card animation state. Driven from Update, not coroutines.</summary>
+        private sealed class CardMotion
+        {
+            public Vector2 FromPos, ToPos;
+            public float FromRot, ToRot;
+            /// <summary>Seconds until this card starts moving.</summary>
+            public float Delay;
+            /// <summary>0..1 along the deal; 1 means settled.</summary>
+            public float Travel = 1f;
+
+            /// <summary>0..1 through a flip; 1 means no flip in progress.</summary>
+            public float Flip = 1f;
+            public Sprite FlipTo;
+            public bool FlipSwapped;
+
+            public bool Busy => Travel < 1f || Flip < 1f;
+        }
+
+        /// <summary>True while any card is still moving or turning over.</summary>
+        public bool IsAnimating
+        {
+            get
+            {
+                foreach (CardMotion m in _motion)
+                    if (m != null && m.Busy) return true;
+                return false;
+            }
+        }
 
         /// <summary>How many cards are currently displayed. Handy for tests.</summary>
         public int VisibleCardCount { get; private set; }
@@ -59,6 +99,12 @@ namespace BlackjackGame.UI.Components
                 if (card != null) card.gameObject.SetActive(false);
             foreach (Image shadow in _shadows)
                 if (shadow != null) shadow.gameObject.SetActive(false);
+            foreach (CardMotion m in _motion)
+            {
+                if (m == null) continue;
+                m.Travel = 1f;
+                m.Flip = 1f;
+            }
             VisibleCardCount = 0;
         }
 
@@ -97,36 +143,117 @@ namespace BlackjackGame.UI.Components
                 }
 
                 bool faceDown = faceDownFrom >= 0 && i >= faceDownFrom;
+                Sprite wanted = faceDown ? _library.Back : _library.GetFace(cards[i]);
+                CardMotion motion = _motion[i];
+
+                bool isNew = !card.gameObject.activeSelf;
                 card.gameObject.SetActive(true);
-                card.sprite = faceDown ? _library.Back : _library.GetFace(cards[i]);
 
                 var rect = (RectTransform)card.transform;
                 rect.sizeDelta = _cardSize;
-                rect.anchoredPosition = new Vector2(-span * 0.5f + step * i, 0f);
 
                 // Fan from -half to +half across the hand, plus a deterministic per-slot
                 // tilt. Deterministic matters: a card must not jump when the hand
                 // re-renders, which happens on every Refresh.
                 float t = count > 1 ? (i / (float)(count - 1)) - 0.5f : 0f;
-                float jitter = _jitterDegrees * Mathf.Sin(i * 12.9898f) ;
-                rect.localRotation = Quaternion.Euler(0f, 0f, -t * _fanDegrees + jitter);
+                float jitter = _jitterDegrees * Mathf.Sin(i * 12.9898f);
 
-                if (shadow != null)
+                motion.ToPos = new Vector2(-span * 0.5f + step * i, 0f);
+                motion.ToRot = -t * _fanDegrees + jitter;
+
+                if (isNew)
                 {
-                    shadow.gameObject.SetActive(true);
-                    var srect = (RectTransform)shadow.transform;
-                    srect.sizeDelta = _cardSize + Vector2.one * _shadowSpread;
-                    srect.anchoredPosition = rect.anchoredPosition + _shadowOffset;
-                    srect.localRotation = rect.localRotation;
-                    // Shadows all sit behind every card, otherwise a later card's shadow
-                    // would fall across the face of the card before it.
-                    srect.SetSiblingIndex(i);
+                    // Fresh card: fly it in from the shoe, staggered behind the ones
+                    // already on their way.
+                    motion.FromPos = _dealFrom;
+                    motion.FromRot = motion.ToRot + 18f;
+                    motion.Delay = CountPending() * _dealStagger;
+                    motion.Travel = 0f;
+                    card.sprite = wanted;
+                    ApplyTransform(i, 0f);
+                }
+                else if (motion.Travel >= 1f)
+                {
+                    // Already settled — just keep it in place unless the hand reflowed.
+                    ApplyTransform(i, 1f);
                 }
 
+                if (card.sprite != wanted && !isNew)
+                {
+                    // Turn the card over rather than swapping the sprite outright.
+                    motion.Flip = 0f;
+                    motion.FlipTo = wanted;
+                    motion.FlipSwapped = false;
+                }
+
+                if (shadow != null) shadow.gameObject.SetActive(true);
+                if (shadow != null) ((RectTransform)shadow.transform).SetSiblingIndex(i);
                 rect.SetSiblingIndex(_pool.Count + i);
             }
 
             VisibleCardCount = count;
+        }
+
+        private int CountPending()
+        {
+            int n = 0;
+            foreach (CardMotion m in _motion)
+                if (m != null && m.Travel < 1f) n++;
+            return n;
+        }
+
+        private void Update()
+        {
+            for (int i = 0; i < _pool.Count; i++)
+            {
+                CardMotion m = _motion[i];
+                if (m == null || !_pool[i].gameObject.activeSelf) continue;
+
+                if (m.Travel < 1f)
+                {
+                    if (m.Delay > 0f) m.Delay -= Time.deltaTime;
+                    else m.Travel = Mathf.Min(1f, m.Travel + Time.deltaTime / Mathf.Max(0.01f, _dealDuration));
+                    ApplyTransform(i, m.Travel);
+                }
+
+                if (m.Flip < 1f)
+                {
+                    m.Flip = Mathf.Min(1f, m.Flip + Time.deltaTime / Mathf.Max(0.01f, _flipDuration));
+
+                    // Swap the face at the halfway point, when the card is edge-on.
+                    if (!m.FlipSwapped && m.Flip >= 0.5f)
+                    {
+                        _pool[i].sprite = m.FlipTo;
+                        m.FlipSwapped = true;
+                    }
+
+                    float scaleX = Mathf.Abs(Mathf.Cos(m.Flip * Mathf.PI));
+                    Vector3 s = _pool[i].transform.localScale;
+                    _pool[i].transform.localScale = new Vector3(Mathf.Max(0.02f, scaleX), s.y, 1f);
+
+                    if (m.Flip >= 1f)
+                        _pool[i].transform.localScale = Vector3.one;
+                }
+            }
+        }
+
+        /// <summary>Places card <paramref name="i"/> a fraction <paramref name="k"/> along its deal.</summary>
+        private void ApplyTransform(int i, float k)
+        {
+            CardMotion m = _motion[i];
+            // Ease-out: cards decelerate into place, which reads as weight.
+            float e = 1f - Mathf.Pow(1f - Mathf.Clamp01(k), 3f);
+
+            var rect = (RectTransform)_pool[i].transform;
+            rect.anchoredPosition = Vector2.LerpUnclamped(m.FromPos, m.ToPos, e);
+            rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.LerpUnclamped(m.FromRot, m.ToRot, e));
+
+            Image shadow = _shadows[i];
+            if (shadow == null) return;
+            var srect = (RectTransform)shadow.transform;
+            srect.sizeDelta = _cardSize + Vector2.one * _shadowSpread;
+            srect.anchoredPosition = rect.anchoredPosition + _shadowOffset;
+            srect.localRotation = rect.localRotation;
         }
 
         private void EnsurePool(int required)
@@ -153,7 +280,9 @@ namespace BlackjackGame.UI.Components
                 card.name = $"Card_{index:00}";
                 card.raycastTarget = false;
                 card.transform.localScale = Vector3.one;
+                card.gameObject.SetActive(false); // Render() activates it and deals it in
                 _pool.Add(card);
+                _motion.Add(new CardMotion());
             }
         }
     }
