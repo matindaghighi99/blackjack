@@ -1,6 +1,7 @@
 // Real Unity IAP implementation. Compiled only when the Unity In-App Purchasing package
-// (com.unity.purchasing) is installed, which defines UNITY_PURCHASING. Until then the app
-// falls back to MockPurchaseService and still compiles cleanly.
+// (com.unity.purchasing) is installed, which defines UNITY_PURCHASING (see the
+// versionDefines entry in BlackjackGame.asmdef). Until then the app falls back to
+// MockPurchaseService and still compiles cleanly.
 #if UNITY_PURCHASING
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,11 @@ namespace BlackjackGame.Economy.IAP
     /// Google Play Billing on Android). Every purchase is held as <b>Pending</b> until its
     /// receipt passes <see cref="IReceiptValidator"/>; only then are chips granted and the
     /// transaction confirmed. This prevents granting on forged or replayed receipts.
+    ///
+    /// NOTE: the Unity IAP listener callbacks (<c>OnInitialized</c>, <c>OnInitializeFailed</c>,
+    /// <c>OnPurchaseFailed</c>) share their names with this class's <see cref="IPurchaseService"/>
+    /// events, so they are implemented *explicitly*. Events and methods live in the same
+    /// declaration space in C#, and an implicit implementation would be a CS0102 collision.
     /// </summary>
     public sealed class UnityIapService : IDetailedStoreListener, IPurchaseService
     {
@@ -66,18 +72,22 @@ namespace BlackjackGame.Economy.IAP
             _controller.InitiatePurchase(product);
         }
 
-        // ---- IStoreListener callbacks ----
+        // ---- IStoreListener / IDetailedStoreListener callbacks (explicit) ----
 
-        public void OnInitialized(IStoreController controller, IExtensionProvider extensions)
+        void IStoreListener.OnInitialized(IStoreController controller, IExtensionProvider extensions)
         {
             _controller = controller;
             Debug.Log("[UnityIapService] Store initialized.");
             OnInitialized?.Invoke();
         }
 
-        public void OnInitializeFailed(InitializationFailureReason error) => OnInitializeFailed(error, null);
+        void IStoreListener.OnInitializeFailed(InitializationFailureReason error)
+            => RaiseInitializeFailed(error, null);
 
-        public void OnInitializeFailed(InitializationFailureReason error, string message)
+        void IStoreListener.OnInitializeFailed(InitializationFailureReason error, string message)
+            => RaiseInitializeFailed(error, message);
+
+        private void RaiseInitializeFailed(InitializationFailureReason error, string message)
         {
             string reason = $"{error}{(string.IsNullOrEmpty(message) ? "" : $" — {message}")}";
             Debug.LogError($"[UnityIapService] Initialize failed: {reason}");
@@ -88,11 +98,25 @@ namespace BlackjackGame.Economy.IAP
         /// Called by Unity IAP for each purchase. We return <see cref="PurchaseProcessingResult.Pending"/>
         /// and finish asynchronously once the receipt is validated.
         /// </summary>
-        public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
+        PurchaseProcessingResult IStoreListener.ProcessPurchase(PurchaseEventArgs args)
         {
             var product = args.purchasedProduct;
             ValidateAndComplete(product); // fire-and-forget; confirms the pending purchase itself
             return PurchaseProcessingResult.Pending;
+        }
+
+        void IStoreListener.OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
+        {
+            OnPurchaseFailed?.Invoke(product?.definition?.id ?? "?", failureReason.ToString());
+        }
+
+        void IDetailedStoreListener.OnPurchaseFailed(Product product, PurchaseFailureDescription failureDescription)
+        {
+            string id = product?.definition?.id ?? failureDescription?.productId ?? "?";
+            string reason = failureDescription?.message
+                            ?? failureDescription?.reason.ToString()
+                            ?? "Unknown failure";
+            OnPurchaseFailed?.Invoke(id, reason);
         }
 
         private async void ValidateAndComplete(Product product)
@@ -125,17 +149,6 @@ namespace BlackjackGame.Economy.IAP
                 // Consume so a rejected/forged receipt doesn't re-prompt forever.
                 _controller.ConfirmPendingPurchase(product);
             }
-        }
-
-        public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
-        {
-            OnPurchaseFailed?.Invoke(product?.definition?.id ?? "?", failureReason.ToString());
-        }
-
-        public void OnPurchaseFailed(Product product, PurchaseFailureDescription failureDescription)
-        {
-            string id = product?.definition?.id ?? failureDescription?.productId ?? "?";
-            OnPurchaseFailed?.Invoke(id, failureDescription?.message ?? failureDescription?.reason.ToString());
         }
 
         private static string CurrentPlatform()
