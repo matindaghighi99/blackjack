@@ -3,7 +3,8 @@
     "rootNamespace": "BlackjackGame",
     "references": [
         "UnityEngine.UI",
-        "UnityEngine.Purchasing"
+        "UnityEngine.Purchasing",
+        "UnityEngine.Purchasing.Stores"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

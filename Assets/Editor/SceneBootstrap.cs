@@ -143,10 +143,12 @@ namespace BlackjackGame.EditorTools
             EnsureFolder(SettingsFolder);
             EnsureFolder(PrefabsFolder);
 
-            GameConfig gameConfig = EnsureAsset<GameConfig>(GameConfigPath);
-            EconomyConfig economyConfig = EnsureAsset<EconomyConfig>(EconomyConfigPath);
+            // Only guarantees the assets exist on disk. Do NOT hold the returned
+            // references across a scene change — see RequireAsset below.
+            EnsureAsset<GameConfig>(GameConfigPath);
+            EnsureAsset<EconomyConfig>(EconomyConfigPath);
 
-            BuildMainMenuScene(gameConfig, economyConfig);
+            BuildMainMenuScene();
             BuildGameScene();
             BuildStoreScene();
 
@@ -156,9 +158,16 @@ namespace BlackjackGame.EditorTools
             AssetDatabase.Refresh();
         }
 
-        private static void BuildMainMenuScene(GameConfig gameConfig, EconomyConfig economyConfig)
+        private static void BuildMainMenuScene()
         {
             Scene scene = NewScene();
+
+            // Loaded AFTER NewScene(). Opening a new scene runs UnloadUnusedAssets, which
+            // collects any asset held only by a plain C# local — a managed variable is not
+            // a GC root as far as Unity's native object lifetime is concerned. Passing the
+            // freshly-created ScriptableObjects in as arguments gives you a "fake null" here.
+            GameConfig gameConfig = RequireAsset<GameConfig>(GameConfigPath);
+            EconomyConfig economyConfig = RequireAsset<EconomyConfig>(EconomyConfigPath);
 
             // Composition root — persists across scene loads via MonoSingleton.
             var appManager = new GameObject("AppManager").AddComponent<AppManager>();
@@ -266,8 +275,13 @@ namespace BlackjackGame.EditorTools
         {
             Scene scene = NewScene();
 
-            // Built inside the fresh scene so the temporary instance never dirties another one.
-            Button packButtonPrefab = CreatePackButtonPrefab();
+            // Built inside the fresh scene so the temporary instance never dirties another one,
+            // then re-loaded from disk so we hold a reference the asset pipeline knows about.
+            CreatePackButtonPrefab();
+            var prefabGo = AssetDatabase.LoadAssetAtPath<GameObject>(PackButtonPrefabPath);
+            if (prefabGo == null)
+                throw new InvalidOperationException($"Could not load prefab at {PackButtonPrefabPath}");
+            Button packButtonPrefab = prefabGo.GetComponent<Button>();
 
             Canvas canvas = CreateCanvas();
             CreateBackground(canvas.transform, Felt);
@@ -423,6 +437,19 @@ namespace BlackjackGame.EditorTools
             if (!EditorSceneManager.SaveScene(scene, path))
                 throw new InvalidOperationException($"Could not save scene to {path}");
             Debug.Log($"[SceneBootstrap] Built {path}");
+        }
+
+        /// <summary>
+        /// Loads an asset that must already exist. Call this immediately before use rather
+        /// than caching the reference across a scene load — see the note in BuildMainMenuScene.
+        /// </summary>
+        private static T RequireAsset<T>(string path) where T : ScriptableObject
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (asset == null)
+                throw new InvalidOperationException(
+                    $"Expected a {typeof(T).Name} at '{path}' but could not load it.");
+            return asset;
         }
 
         private static T EnsureAsset<T>(string path) where T : ScriptableObject
