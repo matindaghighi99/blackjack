@@ -418,6 +418,17 @@ def divider(w=760, h=48):
     return img.resize((w, h), Image.LANCZOS)
 
 
+def card_shadow(w=240, h=320, radius=30, blur=22):
+    """Soft drop shadow sat behind each card so hands read as physical objects."""
+    img = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    b = blur * SS
+    d.rounded_rectangle([b, b, w * SS - b, h * SS - b], radius=radius * SS,
+                        fill=(0, 0, 0, 255))
+    img = img.filter(ImageFilter.GaussianBlur(b * 0.55))
+    return img.resize((w, h), Image.LANCZOS)
+
+
 def menu_felt(w=1080, h=1920):
     """Richer felt for the menu: pooled light, vignette, corner ornament arcs."""
     img = Image.new("RGB", (w, h), FELT)
@@ -469,6 +480,7 @@ def main():
     save(gold_frame_panel(320, 120, 58, FILL_DARK, border=7), "pill.b58")
 
     save(circle_button(120), "circle_button")
+    save(card_shadow(), "card_shadow.b64")
 
     for fn, nm in ((icon_gift, "icon_gift"), (icon_settings, "icon_settings"),
                    (icon_trophy, "icon_trophy"), (icon_cart, "icon_cart"),

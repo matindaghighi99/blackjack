@@ -34,7 +34,20 @@ namespace BlackjackGame.UI.Components
         [Range(0f, 20f)]
         [SerializeField] private float _fanDegrees = 5f;
 
+        [Header("Depth")]
+        [Tooltip("Drop shadow behind each card. Leave empty for no shadow.")]
+        [SerializeField] private Sprite _shadowSprite;
+        [SerializeField] private Vector2 _shadowOffset = new Vector2(6f, -10f);
+        [SerializeField] private Color _shadowColor = new Color(0f, 0f, 0f, 0.45f);
+        [Tooltip("Extra size the shadow adds around the card.")]
+        [SerializeField] private float _shadowSpread = 14f;
+
+        [Tooltip("Random tilt per card, in degrees, so a hand doesn't look mechanical.")]
+        [Range(0f, 8f)]
+        [SerializeField] private float _jitterDegrees = 2.2f;
+
         private readonly List<Image> _pool = new List<Image>();
+        private readonly List<Image> _shadows = new List<Image>();
 
         /// <summary>How many cards are currently displayed. Handy for tests.</summary>
         public int VisibleCardCount { get; private set; }
@@ -44,6 +57,8 @@ namespace BlackjackGame.UI.Components
         {
             foreach (Image card in _pool)
                 if (card != null) card.gameObject.SetActive(false);
+            foreach (Image shadow in _shadows)
+                if (shadow != null) shadow.gameObject.SetActive(false);
             VisibleCardCount = 0;
         }
 
@@ -72,9 +87,12 @@ namespace BlackjackGame.UI.Components
             for (int i = 0; i < _pool.Count; i++)
             {
                 Image card = _pool[i];
+                Image shadow = _shadows[i];
+
                 if (i >= count)
                 {
                     card.gameObject.SetActive(false);
+                    if (shadow != null) shadow.gameObject.SetActive(false);
                     continue;
                 }
 
@@ -86,10 +104,26 @@ namespace BlackjackGame.UI.Components
                 rect.sizeDelta = _cardSize;
                 rect.anchoredPosition = new Vector2(-span * 0.5f + step * i, 0f);
 
-                // Fan from -half to +half across the hand.
+                // Fan from -half to +half across the hand, plus a deterministic per-slot
+                // tilt. Deterministic matters: a card must not jump when the hand
+                // re-renders, which happens on every Refresh.
                 float t = count > 1 ? (i / (float)(count - 1)) - 0.5f : 0f;
-                rect.localRotation = Quaternion.Euler(0f, 0f, -t * _fanDegrees);
-                rect.SetSiblingIndex(i);
+                float jitter = _jitterDegrees * Mathf.Sin(i * 12.9898f) ;
+                rect.localRotation = Quaternion.Euler(0f, 0f, -t * _fanDegrees + jitter);
+
+                if (shadow != null)
+                {
+                    shadow.gameObject.SetActive(true);
+                    var srect = (RectTransform)shadow.transform;
+                    srect.sizeDelta = _cardSize + Vector2.one * _shadowSpread;
+                    srect.anchoredPosition = rect.anchoredPosition + _shadowOffset;
+                    srect.localRotation = rect.localRotation;
+                    // Shadows all sit behind every card, otherwise a later card's shadow
+                    // would fall across the face of the card before it.
+                    srect.SetSiblingIndex(i);
+                }
+
+                rect.SetSiblingIndex(_pool.Count + i);
             }
 
             VisibleCardCount = count;
@@ -99,10 +133,24 @@ namespace BlackjackGame.UI.Components
         {
             while (_pool.Count < required)
             {
+                int index = _pool.Count;
+
+                Image shadow = null;
+                if (_shadowSprite != null)
+                {
+                    var shadowGo = new GameObject($"CardShadow_{index:00}", typeof(RectTransform));
+                    shadowGo.transform.SetParent(_cardRoot, false);
+                    shadow = shadowGo.AddComponent<Image>();
+                    shadow.sprite = _shadowSprite;
+                    shadow.color = _shadowColor;
+                    shadow.raycastTarget = false;
+                }
+                _shadows.Add(shadow);
+
                 // worldPositionStays:false — the default overload keeps world position,
                 // which drags the canvas scale into the child's local transform.
                 Image card = Instantiate(_cardPrefab, _cardRoot, false);
-                card.name = $"Card_{_pool.Count:00}";
+                card.name = $"Card_{index:00}";
                 card.raycastTarget = false;
                 card.transform.localScale = Vector3.one;
                 _pool.Add(card);

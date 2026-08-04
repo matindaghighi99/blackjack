@@ -44,6 +44,21 @@ namespace BlackjackGame.PlayTests
             return component;
         }
 
+        /// <summary>
+        /// The Nth card image inside a HandView, found by name rather than by child index.
+        /// HandView also parents a drop shadow per card, so positional indexing into
+        /// GetComponentsInChildren picks up shadows.
+        /// </summary>
+        private static Image CardAt(HandView view, int index)
+        {
+            string wanted = $"Card_{index:00}";
+            foreach (Image image in view.GetComponentsInChildren<Image>())
+                if (image.name == wanted) return image;
+
+            Assert.Fail($"No '{wanted}' under {view.name}.");
+            return null;
+        }
+
         /// <summary>Boots the app the way a player would, and guarantees a spendable balance.</summary>
         private static IEnumerator BootFromMainMenu()
         {
@@ -124,10 +139,9 @@ namespace BlackjackGame.PlayTests
                 // The hole card must stay face down, and the label must not leak the total.
                 if (game.Engine.DealerHand.Cards.Count > 1)
                 {
-                    Image[] shown = dealerCards.GetComponentsInChildren<Image>();
-                    Assert.GreaterOrEqual(shown.Length, 2);
-                    Assert.IsNotNull(shown[1].sprite, "Hole card has no sprite.");
-                    StringAssert.Contains("Back", shown[1].sprite.name,
+                    Image hole = CardAt(dealerCards, 1);
+                    Assert.IsNotNull(hole.sprite, "Hole card has no sprite.");
+                    StringAssert.Contains("Back", hole.sprite.name,
                         "Dealer's hole card should be face down during the player's turn.");
                     StringAssert.Contains("?", FindUI<TMP_Text>("DealerHandLabel").text,
                         "Dealer label leaks the hidden card's value.");
@@ -162,15 +176,20 @@ namespace BlackjackGame.PlayTests
             Assert.AreEqual(RoundPhase.Settled, game.Engine.Phase, "Round never settled.");
 
             var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
-            StringAssert.StartsWith("Chips:", balanceLabel.text, "Table balance label not refreshed.");
+            Assert.IsTrue(long.TryParse(balanceLabel.text.Replace(",", ""), out long shownBalance),
+                $"Table balance label should be a plain number, was '{balanceLabel.text}'.");
+            Assert.AreEqual(chips.Balance, shownBalance, "Balance label is out of sync.");
             Assert.IsNotEmpty(FindUI<TMP_Text>("DealerHandLabel").text);
             Assert.IsNotEmpty(FindUI<TMP_Text>("PlayerHandLabel").text);
 
             // Once settled the dealer's hand is fully revealed.
             Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount);
-            foreach (Image card in dealerCards.GetComponentsInChildren<Image>())
+            for (int i = 0; i < dealerCards.VisibleCardCount; i++)
+            {
+                Image card = CardAt(dealerCards, i);
                 Assert.IsFalse(card.sprite != null && card.sprite.name.Contains("Back"),
                     "Dealer still has a face-down card after the round settled.");
+            }
             StringAssert.DoesNotContain("?", FindUI<TMP_Text>("DealerHandLabel").text);
             Assert.IsNotEmpty(FindUI<TMP_Text>("OutcomeLabel").text, "No outcome was shown.");
         }

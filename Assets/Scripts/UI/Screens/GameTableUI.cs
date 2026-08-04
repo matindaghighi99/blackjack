@@ -21,6 +21,12 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private TMP_InputField _betInput;
         [SerializeField] private Button _dealButton;
 
+        [Header("Row Swapping")]
+        [Tooltip("Betting controls — shown between rounds.")]
+        [SerializeField] private CanvasGroup _betRow;
+        [Tooltip("Hit/Stand/Double/Split — shown while a round is live.")]
+        [SerializeField] private CanvasGroup _actionRow;
+
         [Header("Action Buttons")]
         [SerializeField] private Button _hitButton;
         [SerializeField] private Button _standButton;
@@ -69,7 +75,8 @@ namespace BlackjackGame.UI.Screens
 
         private void Refresh()
         {
-            if (_balanceLabel != null) _balanceLabel.text = $"Chips: {_game.Balance:N0}";
+            // Just the number — it sits inside the coin pill, which carries the meaning.
+            if (_balanceLabel != null) _balanceLabel.text = $"{_game.Balance:N0}";
 
             var engine = _game.Engine;
             if (engine == null)
@@ -80,6 +87,8 @@ namespace BlackjackGame.UI.Screens
                 if (_playerHandView != null) _playerHandView.Clear();
                 if (_dealerHandLabel != null) _dealerHandLabel.text = "Dealer";
                 if (_playerHandLabel != null) _playerHandLabel.text = "Place your bet";
+                ShowRow(_betRow, true);
+                ShowRow(_actionRow, false);
                 return;
             }
 
@@ -92,7 +101,29 @@ namespace BlackjackGame.UI.Screens
             if (_splitButton != null) _splitButton.interactable = engine.CanSplit;
             if (_dealButton != null) _dealButton.interactable = !playing;
 
+            // Betting and playing are mutually exclusive, so the two control rows share
+            // the same band on the rail — the mockup only ever shows one of them.
+            ShowRow(_betRow, !playing);
+            ShowRow(_actionRow, playing);
+
             if (engine.Phase == RoundPhase.Settled) ShowOutcome(engine);
+        }
+
+        /// <summary>
+        /// Shows or hides a control row.
+        ///
+        /// The row is deactivated outright, not just faded via the CanvasGroup: TMP draws
+        /// its drop-shadow underlay in the shader, and that underlay ignores CanvasGroup
+        /// alpha — so a "hidden" row still ghosted its labels through the visible one.
+        /// The CanvasGroup is kept for interactivity and for fading later.
+        /// </summary>
+        private static void ShowRow(CanvasGroup group, bool visible)
+        {
+            if (group == null) return;
+            group.alpha = visible ? 1f : 0f;
+            group.interactable = visible;
+            group.blocksRaycasts = visible;
+            if (group.gameObject.activeSelf != visible) group.gameObject.SetActive(visible);
         }
 
         private void RenderHands(BlackjackEngine engine)
