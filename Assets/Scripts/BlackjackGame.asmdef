@@ -2,7 +2,8 @@
     "name": "BlackjackGame",
     "rootNamespace": "BlackjackGame",
     "references": [
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "UnityEngine.Purchasing"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -11,6 +12,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.purchasing",
+            "expression": "",
+            "define": "UNITY_PURCHASING"
+        }
+    ],
     "noEngineReferences": false
 }

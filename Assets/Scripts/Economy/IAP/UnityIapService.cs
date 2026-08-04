@@ -7,7 +7,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Purchasing;
-using UnityEngine.Purchasing.Extensions;
+using UnityEngine.Purchasing.Extension;
 
 namespace BlackjackGame.Economy.IAP
 {
@@ -73,6 +73,10 @@ namespace BlackjackGame.Economy.IAP
         }
 
         // ---- IStoreListener / IDetailedStoreListener callbacks (explicit) ----
+        // CS0618/CS0672: two IStoreListener members are [Obsolete] but must still be
+        // implemented to satisfy the interface. The non-obsolete overloads are preferred
+        // and are what actually gets called.
+#pragma warning disable CS0618
 
         void IStoreListener.OnInitialized(IStoreController controller, IExtensionProvider extensions)
         {
@@ -118,6 +122,8 @@ namespace BlackjackGame.Economy.IAP
                             ?? "Unknown failure";
             OnPurchaseFailed?.Invoke(id, reason);
         }
+
+#pragma warning restore CS0618
 
         private async void ValidateAndComplete(Product product)
         {

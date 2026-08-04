@@ -1,0 +1,6 @@
+﻿<Solution>
+  <Project Path="BlackjackGame.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="BlackjackGame.Tests.csproj" />
+  <Project Path="BlackjackGame.PlayTests.csproj" />
+</Solution>
