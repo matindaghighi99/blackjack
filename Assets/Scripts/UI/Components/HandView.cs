@@ -83,8 +83,11 @@ namespace BlackjackGame.UI.Components
         {
             get
             {
-                foreach (CardMotion m in _motion)
-                    if (m != null && m.Busy) return true;
+                // Only active cards count. A hidden card's motion state is stale by
+                // definition, and letting it register here leaves IsAnimating stuck true.
+                for (int i = 0; i < _motion.Count; i++)
+                    if (_motion[i] != null && _motion[i].Busy && _pool[i].gameObject.activeSelf)
+                        return true;
                 return false;
             }
         }
@@ -134,9 +137,14 @@ namespace BlackjackGame.UI.Components
             {
                 Image card = _pool[i];
                 Image shadow = _shadows[i];
+                CardMotion motion = _motion[i];
 
                 if (i >= count)
                 {
+                    // Reset motion as well as hiding: Update skips inactive cards, so a
+                    // card hidden mid-deal would keep Travel < 1 for ever.
+                    motion.Travel = 1f;
+                    motion.Flip = 1f;
                     card.gameObject.SetActive(false);
                     if (shadow != null) shadow.gameObject.SetActive(false);
                     continue;
@@ -144,7 +152,6 @@ namespace BlackjackGame.UI.Components
 
                 bool faceDown = faceDownFrom >= 0 && i >= faceDownFrom;
                 Sprite wanted = faceDown ? _library.Back : _library.GetFace(cards[i]);
-                CardMotion motion = _motion[i];
 
                 bool isNew = !card.gameObject.activeSelf;
                 card.gameObject.SetActive(true);
@@ -178,9 +185,12 @@ namespace BlackjackGame.UI.Components
                     ApplyTransform(i, 1f);
                 }
 
-                if (card.sprite != wanted && !isNew)
+                // Turn the card over rather than swapping the sprite outright. Guard
+                // against restarting a flip that is already heading for the same face —
+                // Render runs on every Refresh, which would otherwise reset it each time.
+                bool alreadyFlippingToWanted = motion.Flip < 1f && motion.FlipTo == wanted;
+                if (card.sprite != wanted && !isNew && !alreadyFlippingToWanted)
                 {
-                    // Turn the card over rather than swapping the sprite outright.
                     motion.Flip = 0f;
                     motion.FlipTo = wanted;
                     motion.FlipSwapped = false;

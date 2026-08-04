@@ -183,11 +183,13 @@ namespace BlackjackGame.PlayTests
                     yield return WaitForCards(dealerCards, playerCards);
                 }
 
-                Button stand = FindUI<Button>("StandButton");
+                // Look the button up inside the loop rather than caching it: the action
+                // row is hidden the moment the round settles, and hitting can bust the
+                // hand — so a reference taken beforehand may point at a hidden object.
                 int guard = 0;
                 while (game.Engine.Phase == RoundPhase.PlayerTurn && guard++ < 25)
                 {
-                    stand.onClick.Invoke();
+                    FindUI<Button>("StandButton").onClick.Invoke();
                     yield return null;
                 }
             }

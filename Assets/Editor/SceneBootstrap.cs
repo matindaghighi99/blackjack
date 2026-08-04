@@ -43,7 +43,7 @@ namespace BlackjackGame.EditorTools
 
         private const string GameConfigPath = SettingsFolder + "/GameConfig.asset";
         private const string EconomyConfigPath = SettingsFolder + "/EconomyConfig.asset";
-        private const string PackButtonPrefabPath = PrefabsFolder + "/PackButton.prefab";
+        private const string PackRowPrefabPath = PrefabsFolder + "/StorePackRow.prefab";
         private const string CardPrefabPath = PrefabsFolder + "/CardView.prefab";
         private const string CardLibraryPath = SettingsFolder + "/CardSpriteLibrary.asset";
 
@@ -57,6 +57,8 @@ namespace BlackjackGame.EditorTools
         // Table plate + sprites lifted from the concept render by
         // art-source/extract_table_art.py
         private const string TableBackgroundPath = "Assets/Art/Table/TableBackground.png";
+        private const string StoreBackgroundPath = "Assets/Art/Table/StoreBackground.png";
+        private const string MenuBackgroundPath = "Assets/Art/Table/MenuBackground.png";
 
         // ---- Concept-render coordinate mapping -------------------------------
         // docs/screenshots/game-table.png is 1024x1536; the game canvas is 1080x1920 with
@@ -213,7 +215,9 @@ namespace BlackjackGame.EditorTools
 
             Canvas canvas = CreateCanvas();
             Transform root = canvas.transform;
-            CreateBackground(root, Color.white, UiSprite("felt_menu"));
+            // The crest, wordmark, tagline, house rules and corner props are all static,
+            // so they stay part of the render rather than being rebuilt as UI objects.
+            CreateBackground(root, Color.white, LoadSprite(MenuBackgroundPath));
 
             // ---- top bar: balance pill + quick-action circles -------------------
             CreateFrame(root, "BalancePill", "pill", new Vector2(-300f, 856f), new Vector2(400f, 104f));
@@ -227,48 +231,22 @@ namespace BlackjackGame.EditorTools
             string[] quickIcons = { "icon_gift", "icon_settings", "icon_trophy" };
             for (int i = 0; i < quickIcons.Length; i++)
             {
-                var at = new Vector2(214f + i * 128f, 856f);
-                CreateSpriteImage(root, $"QuickButton{i}", "circle_button", at, 104f);
-                CreateSpriteImage(root, $"QuickIcon{i}", quickIcons[i], at, 54f);
+                var at = new Vector2(SrcX(722f + i * 108f), SrcY(70f));
+                CreateSpriteImage(root, $"QuickButton{i}", "circle_button", at, 100f);
+                CreateSpriteImage(root, $"QuickIcon{i}", quickIcons[i], at, 52f);
             }
 
-            // ---- crest + wordmark ------------------------------------------------
-            CreateSpriteImage(root, "Emblem", "emblem_ace", new Vector2(0f, 560f), 430f);
-            CreateText(root, "Title", "BLACKJACK", new Vector2(0f, 276f),
-                new Vector2(1000f, 220f), 146f, TextAlignmentOptions.Center,
-                TextStyle.DisplayGold, characterSpacing: 2f);
-            CreateSpriteImage(root, "TitleRule", "divider", new Vector2(0f, 188f), 40f);
-            CreateText(root, "Tagline", "BEAT THE DEALER.  WIN BIG.", new Vector2(0f, 148f),
-                new Vector2(960f, 60f), 36f, TextAlignmentOptions.Center,
-                TextStyle.BodyGold, characterSpacing: 8f);
-
-            // ---- action rows -----------------------------------------------------
+            // ---- action rows, on the render's own marks --------------------------
             Button playButton = CreateMenuRow(root, "PlayButton", "btn_green", "icon_cards",
-                "PLAY", "DEAL YOUR LUCK", new Vector2(0f, -28f));
+                "PLAY", "DEAL YOUR LUCK", new Vector2(SrcX(513), SrcY(815)));
             Button storeButton = CreateMenuRow(root, "StoreButton", "btn_blue", "icon_cart",
-                "STORE", "GET CHIPS & ITEMS", new Vector2(0f, -238f));
+                "STORE", "GET CHIPS & ITEMS", new Vector2(SrcX(513), SrcY(982)));
             Button rewardsButton = CreateMenuRow(root, "RewardsButton", "btn_red", "icon_gift",
-                "DAILY REWARDS", "CLAIM YOUR PRIZE", new Vector2(0f, -448f));
+                "DAILY REWARDS", "CLAIM YOUR PRIZE", new Vector2(SrcX(513), SrcY(1144)));
 
             TMP_Text rewardStatusLabel = CreateText(root, "RewardStatusLabel", "",
-                new Vector2(0f, -580f), new Vector2(940f, 70f), 34f,
+                new Vector2(SrcX(513), SrcY(1258)), new Vector2(940f, 60f), 32f,
                 TextAlignmentOptions.Center, TextStyle.BodyInk);
-
-            // ---- house rules ------------------------------------------------------
-            CreateSpriteImage(root, "RulesRuleTop", "divider", new Vector2(0f, -640f), 36f);
-            CreateText(root, "Rule1", "BLACKJACK PAYS 3 TO 2", new Vector2(0f, -700f),
-                new Vector2(960f, 60f), 46f, TextAlignmentOptions.Center,
-                TextStyle.DisplayGold, characterSpacing: 4f);
-            CreateText(root, "Rule2", "DEALER MUST HIT SOFT 17", new Vector2(0f, -756f),
-                new Vector2(960f, 50f), 30f, TextAlignmentOptions.Center,
-                TextStyle.BodyGold, characterSpacing: 6f);
-            CreateSpriteImage(root, "RulesRuleBottom", "divider", new Vector2(0f, -812f), 36f);
-
-            TMP_Text disclaimer = CreateText(root, "Disclaimer",
-                "Virtual chips only. No real money, no cash prizes.",
-                new Vector2(0f, -886f), new Vector2(960f, 60f), 26f,
-                TextAlignmentOptions.Center, TextStyle.BodyInk);
-            disclaimer.alpha = 0.5f;
 
             var ui = canvas.gameObject.AddComponent<MainMenuUI>();
             Wire(ui,
@@ -382,55 +360,67 @@ namespace BlackjackGame.EditorTools
 
             // Built inside the fresh scene so the temporary instance never dirties another one,
             // then re-loaded from disk so we hold a reference the asset pipeline knows about.
-            CreatePackButtonPrefab();
-            var prefabGo = AssetDatabase.LoadAssetAtPath<GameObject>(PackButtonPrefabPath);
+            CreatePackRowPrefab();
+            var prefabGo = AssetDatabase.LoadAssetAtPath<GameObject>(PackRowPrefabPath);
             if (prefabGo == null)
-                throw new InvalidOperationException($"Could not load prefab at {PackButtonPrefabPath}");
-            Button packButtonPrefab = prefabGo.GetComponent<Button>();
+                throw new InvalidOperationException($"Could not load prefab at {PackRowPrefabPath}");
+            StorePackRow packRowPrefab = prefabGo.GetComponent<StorePackRow>();
 
             Canvas canvas = CreateCanvas();
-            CreateBackground(canvas.transform, Color.white, LoadSprite(FeltSpritePath));
+            Transform root = canvas.transform;
 
-            CreateText(canvas.transform, "Title", "GET CHIPS",
-                new Vector2(0f, 780f), new Vector2(1000f, 150f), 108f,
-                TextAlignmentOptions.Center, TextStyle.DisplayGold, characterSpacing: 4f);
-            TMP_Text balanceLabel = CreateText(canvas.transform, "BalanceLabel", "Balance: 0",
-                new Vector2(0f, 660f), new Vector2(1000f, 80f), 46f,
-                TextAlignmentOptions.Center, TextStyle.BodyGold);
+            // "GET CHIPS", "TAP TO PURCHASE" and the corner chip stacks are static, so they
+            // stay part of the render. Only the rows and the top bar are rebuilt live.
+            CreateBackground(root, Color.white, LoadSprite(StoreBackgroundPath));
 
-            // Pack rows are instantiated into this container at runtime by StoreUI.
-            CreatePanel(canvas.transform, "PackPanel", new Vector2(0f, 40f), new Vector2(1000f, 1080f));
-            GameObject listGo = NewUIObject("PackList", canvas.transform);
-            Place(listGo, new Vector2(0f, 40f), new Vector2(940f, 1040f));
+            Button backButton = CreateCircleButton(root, "BackButton", "icon_back",
+                new Vector2(SrcX(62), SrcY(70)), 100f);
+            CreateFrame(root, "BalancePill", "pill",
+                new Vector2(SrcX(300), SrcY(70)), new Vector2(360f, 96f));
+            CreateSpriteImage(root, "CoinIcon", "icon_coin", new Vector2(SrcX(154), SrcY(70)), 72f);
+            CreateSpriteImage(root, "AddChipsIcon", "icon_plus", new Vector2(SrcX(446), SrcY(70)), 42f);
+            TMP_Text balanceLabel = CreateText(root, "BalanceLabel", "0",
+                new Vector2(SrcX(304), SrcY(70)), new Vector2(200f, 72f), 46f,
+                TextAlignmentOptions.Center, TextStyle.DisplayGold);
+
+            // Pack rows are instantiated into this container at runtime by StoreUI. The
+            // container spans exactly the band the render's four rows occupy.
+            GameObject listGo = NewUIObject("PackList", root);
+            Place(listGo, new Vector2(SrcX(512), SrcY(900)), new Vector2(960f, 960f));
             var layout = listGo.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 24f;
-            layout.padding = new RectOffset(10, 10, 20, 20);
+            layout.spacing = 16f;
+            layout.padding = new RectOffset(0, 0, 0, 0);
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
             layout.childControlHeight = false;
 
-            TMP_Text statusLabel = CreateText(canvas.transform, "StatusLabel", "",
-                new Vector2(0f, -600f), new Vector2(1000f, 110f), 40f,
+            TMP_Text statusLabel = CreateText(root, "StatusLabel", "",
+                new Vector2(SrcX(512), SrcY(1420)), new Vector2(1000f, 80f), 38f,
                 TextAlignmentOptions.Center, TextStyle.BodyGold);
 
-            Button backButton = CreateButton(canvas.transform, "BackButton", "BACK",
-                new Vector2(0f, -760f), new Vector2(440f, 130f), Panel);
-
-            TMP_Text storeDisclaimer = CreateText(canvas.transform, "Disclaimer",
+            TMP_Text storeDisclaimer = CreateText(root, "Disclaimer",
                 "Chips are virtual and have no cash value.",
-                new Vector2(0f, -880f), new Vector2(1000f, 60f), 26f,
+                new Vector2(SrcX(512), SrcY(1490)), new Vector2(1000f, 56f), 24f,
                 TextAlignmentOptions.Center, TextStyle.BodyInk);
             storeDisclaimer.alpha = 0.5f;
 
             var ui = canvas.gameObject.AddComponent<StoreUI>();
             Wire(ui,
                 ("_packListRoot", listGo.transform),
-                ("_packButtonPrefab", packButtonPrefab),
+                ("_packRowPrefab", packRowPrefab),
                 ("_balanceLabel", balanceLabel),
                 ("_statusLabel", statusLabel),
                 ("_backButton", backButton));
+
+            // Chip artwork array, one sprite per pack, in EconomyConfig order.
+            var so = new SerializedObject(ui);
+            SerializedProperty art = so.FindProperty("_packArtwork");
+            art.arraySize = 4;
+            for (int i = 0; i < 4; i++)
+                art.GetArrayElementAtIndex(i).objectReferenceValue = UiSprite($"chips_{i}");
+            so.ApplyModifiedPropertiesWithoutUndo();
 
             SaveScene(scene, StoreScenePath);
         }
@@ -470,6 +460,8 @@ namespace BlackjackGame.EditorTools
 
             if (AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath) == null)
                 problems.Add($"Missing card prefab at {CardPrefabPath}.");
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(PackRowPrefabPath) == null)
+                problems.Add($"Missing store row prefab at {PackRowPrefabPath}.");
             if (AssetDatabase.LoadAssetAtPath<Sprite>(FeltSpritePath) == null)
                 problems.Add($"Missing table felt sprite at {FeltSpritePath}.");
 
@@ -712,6 +704,7 @@ namespace BlackjackGame.EditorTools
 
             // chip_stack was first written to Assets/Art/Table; it belongs with the kit.
             if (AssetDatabase.DeleteAsset("Assets/Art/Table/chip_stack.png")) removed++;
+            if (AssetDatabase.DeleteAsset("Assets/Prefabs/PackButton.prefab")) removed++;
 
             // The drawn ".b56" button frames were superseded by ".b46" frames built from
             // the concept render. Both matching would make UiSprite's lookup ambiguous.
@@ -1172,29 +1165,75 @@ namespace BlackjackGame.EditorTools
         }
 
         /// <summary>
-        /// Builds (or rebuilds) the row template StoreUI clones for each chip pack.
-        /// A Button with a stretched child Text, which is exactly what StoreUI expects.
+        /// Builds the row template StoreUI clones for each chip pack: the render's gold
+        /// row frame, chip artwork, amount, bonus, price pill and BEST VALUE ribbon.
         /// </summary>
-        private static Button CreatePackButtonPrefab()
+        private static void CreatePackRowPrefab()
         {
             EnsureFolder(PrefabsFolder);
 
-            Button temp = CreateButton(null, "PackButton", "Chip Pack",
-                Vector2.zero, new Vector2(900f, 150f), ButtonFill);
+            var size = new Vector2(944f, 216f);
+            GameObject go = NewUIObject("StorePackRow", null);
+            Place(go, Vector2.zero, size);
 
-            var layoutElement = temp.gameObject.AddComponent<LayoutElement>();
-            layoutElement.preferredHeight = 150f;
-            layoutElement.minHeight = 150f;
-            layoutElement.preferredWidth = 900f;
+            var frame = go.AddComponent<Image>();
+            frame.sprite = UiSprite("store_row");
+            frame.type = Image.Type.Sliced;
+            frame.pixelsPerUnitMultiplier = 1f;
 
-            GameObject saved = PrefabUtility.SaveAsPrefabAsset(temp.gameObject, PackButtonPrefabPath);
-            Object.DestroyImmediate(temp.gameObject);
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = frame;
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
+            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+            colors.disabledColor = new Color(0.45f, 0.47f, 0.45f, 0.8f);
+            button.colors = colors;
 
+            var layoutElement = go.AddComponent<LayoutElement>();
+            layoutElement.preferredHeight = size.y;
+            layoutElement.minHeight = size.y;
+
+            Transform t = go.transform;
+            Image chips = CreateSpriteImage(t, "ChipArt", "chips_0",
+                new Vector2(-size.x / 2f + 150f, 0f), 176f);
+
+            TMP_Text amount = CreateText(t, "Amount", "10,000", new Vector2(-20f, 12f),
+                new Vector2(430f, 110f), 82f, TextAlignmentOptions.Center,
+                TextStyle.DisplayGold);
+            TMP_Text bonus = CreateText(t, "Bonus", "+5,000 BONUS", new Vector2(-20f, -58f),
+                new Vector2(430f, 48f), 30f, TextAlignmentOptions.Center,
+                TextStyle.BodyGold, characterSpacing: 3f);
+
+            GameObject priceGo = NewUIObject("PriceButton", t);
+            Place(priceGo, new Vector2(size.x / 2f - 150f, 0f), new Vector2(210f, 118f));
+            var priceBg = priceGo.AddComponent<Image>();
+            priceBg.sprite = UiSprite("btn_price");
+            priceBg.type = Image.Type.Sliced;
+            priceBg.pixelsPerUnitMultiplier = 1f;
+            priceBg.raycastTarget = false;
+
+            TMP_Text price = CreateText(priceGo.transform, "PriceLabel", "$1.99", Vector2.zero,
+                new Vector2(190f, 90f), 52f, TextAlignmentOptions.Center, TextStyle.BodyInk);
+            price.color = new Color(0.10f, 0.08f, 0.03f);
+
+            Image badge = CreateSpriteImage(t, "BestValueBadge", "badge_best_value",
+                new Vector2(-size.x / 2f + 62f, size.y / 2f - 58f), 150f);
+
+            var row = go.AddComponent<StorePackRow>();
+            Wire(row,
+                ("_button", button),
+                ("_chipImage", chips),
+                ("_amountLabel", amount),
+                ("_bonusLabel", bonus),
+                ("_priceLabel", price),
+                ("_bestValueBadge", badge.gameObject));
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(go, PackRowPrefabPath);
+            Object.DestroyImmediate(go);
             if (saved == null)
-                throw new InvalidOperationException($"Could not save prefab to {PackButtonPrefabPath}");
+                throw new InvalidOperationException($"Could not save prefab to {PackRowPrefabPath}");
 
-            Debug.Log($"[SceneBootstrap] Built {PackButtonPrefabPath}");
-            return saved.GetComponent<Button>();
+            Debug.Log($"[SceneBootstrap] Built {PackRowPrefabPath}");
         }
 
         /// <summary>Human-readable dump of the current wiring — handy when debugging by hand.</summary>

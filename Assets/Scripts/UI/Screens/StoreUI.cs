@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using BlackjackGame.Config;
 using BlackjackGame.Core;
 using BlackjackGame.Economy;
+using BlackjackGame.UI.Components;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,10 +19,12 @@ namespace BlackjackGame.UI.Screens
     public sealed class StoreUI : MonoBehaviour
     {
         [Header("Layout")]
-        [Tooltip("Parent transform (e.g. a Vertical Layout Group) that pack buttons are added to.")]
+        [Tooltip("Parent transform (e.g. a Vertical Layout Group) that pack rows are added to.")]
         [SerializeField] private Transform _packListRoot;
-        [Tooltip("A Button prefab with a child Text used as the row template.")]
-        [SerializeField] private Button _packButtonPrefab;
+        [Tooltip("Row template: artwork, amount, bonus and price.")]
+        [SerializeField] private StorePackRow _packRowPrefab;
+        [Tooltip("Chip artwork per pack, in EconomyConfig order. Reused if there are fewer.")]
+        [SerializeField] private Sprite[] _packArtwork;
 
         [Header("Display")]
         [SerializeField] private TMP_Text _balanceLabel;
@@ -64,21 +68,43 @@ namespace BlackjackGame.UI.Screens
 
         private void BuildPackList()
         {
-            if (_packListRoot == null || _packButtonPrefab == null) return;
+            if (_packListRoot == null || _packRowPrefab == null) return;
 
-            foreach (ChipPack pack in _store.AvailablePacks)
+            int bestValue = BestValueIndex(_store.AvailablePacks);
+
+            for (int i = 0; i < _store.AvailablePacks.Count; i++)
             {
-                ChipPack captured = pack; // avoid closure capture bug
-                Button button = Instantiate(_packButtonPrefab, _packListRoot, false);
-                var label = button.GetComponentInChildren<TMP_Text>();
-                if (label != null)
-                {
-                    int total = captured.ChipAmount + captured.BonusChips;
-                    string bonus = captured.BonusChips > 0 ? $" (+{captured.BonusChips:N0} bonus)" : "";
-                    label.text = $"{captured.DisplayName} — {total:N0} chips{bonus}   {captured.PriceLabel}";
-                }
-                button.onClick.AddListener(() => Purchase(captured.Id));
+                ChipPack captured = _store.AvailablePacks[i]; // avoid closure capture bug
+                StorePackRow row = Instantiate(_packRowPrefab, _packListRoot, false);
+
+                Sprite art = _packArtwork != null && _packArtwork.Length > 0
+                    ? _packArtwork[i % _packArtwork.Length]
+                    : null;
+
+                row.Bind(captured, art, i == bestValue);
+                if (row.Button != null) row.Button.onClick.AddListener(() => Purchase(captured.Id));
             }
+        }
+
+        /// <summary>
+        /// The pack giving the most bonus per chip bought. Derived rather than hard-coded
+        /// so the badge follows EconomyConfig if the packs are ever retuned.
+        /// </summary>
+        private static int BestValueIndex(IReadOnlyList<ChipPack> packs)
+        {
+            int best = -1;
+            float bestRatio = 0f;
+            for (int i = 0; i < packs.Count; i++)
+            {
+                if (packs[i].ChipAmount <= 0 || packs[i].BonusChips <= 0) continue;
+                float ratio = packs[i].BonusChips / (float)packs[i].ChipAmount;
+                if (ratio > bestRatio)
+                {
+                    bestRatio = ratio;
+                    best = i;
+                }
+            }
+            return best;
         }
 
         private void Purchase(string packId)

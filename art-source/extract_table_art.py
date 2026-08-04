@@ -206,6 +206,135 @@ def button_frame(src_frame, tint, inset=20, bottom_inset=6, radius=22):
     return out
 
 
+def key_out_background(img, sample_box, tolerance=52, feather=1.4):
+    """
+    Makes the felt behind a lifted element transparent.
+
+    The background is sampled from a corner of the crop rather than assumed, because the
+    store rows sit on slightly different greens. Distance in RGB is enough to separate
+    felt from gold chips; a light blur on the resulting alpha stops the edge looking cut
+    out with scissors.
+    """
+    img = img.convert("RGBA")
+    px = img.load()
+    sx0, sy0, sx1, sy1 = sample_box
+    n = 0
+    acc = [0, 0, 0]
+    for y in range(sy0, sy1):
+        for x in range(sx0, sx1):
+            c = px[x, y]
+            acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]
+            n += 1
+    bg = tuple(v // max(1, n) for v in acc)
+
+    alpha = Image.new("L", img.size, 255)
+    ap = alpha.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, _ = px[x, y]
+            d = abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2])
+            ap[x, y] = 0 if d < tolerance else min(255, (d - tolerance) * 6)
+
+    alpha = alpha.filter(ImageFilter.GaussianBlur(feather))
+    img.putalpha(alpha)
+    return img
+
+
+# Store render geometry, measured by scanning for the gold row borders.
+STORE_ROWS = [(64, 447, 960, 652), (48, 662, 972, 922),
+              (64, 934, 960, 1134), (64, 1151, 960, 1354)]
+STORE_TOPBAR = [(0, 20, 470, 122), (660, 24, 990, 120)]
+STORE_ROW_TEMPLATE = (64, 447, 960, 652)
+STORE_ROW_CONTENT = (86, 462, 944, 640)      # chips + amount + price, painted out
+STORE_PRICE_BUTTON = (754, 495, 936, 604)
+STORE_PRICE_TEXT = (766, 505, 926, 596)
+# chips_1 is cropped clear of the BEST VALUE ribbon, which is lifted separately.
+STORE_CHIPS = [(92, 458, 348, 642), (176, 716, 404, 908),
+               (86, 946, 342, 1126), (86, 1164, 342, 1346)]
+STORE_RIBBON = (48, 660, 268, 852)
+
+
+# Menu render geometry: the three action rows and the top bar, measured the same way.
+MENU_DYNAMIC = [
+    (165, 736, 862, 895), (165, 904, 862, 1060), (165, 1065, 862, 1222),
+    (20, 20, 440, 120), (660, 24, 990, 120),
+]
+
+
+def extract_menu(menu, table_dir):
+    """
+    Menu background plate.
+
+    Everything static stays painted: the Ace crest, the BLACKJACK wordmark, the tagline,
+    the house rules and the chip/card props in the corners. Only the three buttons and
+    the top bar are removed, because those have to be live.
+    """
+    plate = inpaint_diffuse(menu.copy(), MENU_DYNAMIC)
+    plate = add_grain(plate, MENU_DYNAMIC)
+
+    scaled = plate.resize((GAME_W, int(plate.height * GAME_W / plate.width)), Image.LANCZOS)
+    out = Image.new("RGB", (GAME_W, GAME_H))
+    pad_top = 110
+    out.paste(scaled, (0, pad_top))
+    out.paste(scaled.crop((0, 0, GAME_W, 4)).resize((GAME_W, pad_top), Image.BILINEAR), (0, 0))
+    rest = GAME_H - scaled.height - pad_top
+    if rest > 0:
+        out.paste(scaled.crop((0, scaled.height - 4, GAME_W, scaled.height))
+                  .resize((GAME_W, rest), Image.BILINEAR), (0, pad_top + scaled.height))
+    out.save(os.path.join(table_dir, "MenuBackground.png"))
+    print(f"  Assets/Art/Table/MenuBackground.png  {out.size}")
+
+
+def extract_store(store, ui_dir, table_dir):
+    """Background plate plus the row furniture for the chip store."""
+    plate = inpaint_diffuse(store.copy(), STORE_ROWS + STORE_TOPBAR)
+    plate = add_grain(plate, STORE_ROWS + STORE_TOPBAR)
+
+    scaled = plate.resize((GAME_W, int(plate.height * GAME_W / plate.width)), Image.LANCZOS)
+    out = Image.new("RGB", (GAME_W, GAME_H))
+    pad_top = 110
+    out.paste(scaled, (0, pad_top))
+    out.paste(scaled.crop((0, 0, GAME_W, 4)).resize((GAME_W, pad_top), Image.BILINEAR), (0, 0))
+    rest = GAME_H - scaled.height - pad_top
+    if rest > 0:
+        out.paste(scaled.crop((0, scaled.height - 4, GAME_W, scaled.height))
+                  .resize((GAME_W, rest), Image.BILINEAR), (0, pad_top + scaled.height))
+    out.save(os.path.join(table_dir, "StoreBackground.png"))
+    print(f"  Assets/Art/Table/StoreBackground.png  {out.size}")
+
+    # Row frame: keep the render's gold border, repaint the interior. Inpainting the
+    # interior instead seeds the fill from the gold border and comes out olive — the same
+    # trap the action buttons hit.
+    row = store.crop(STORE_ROW_TEMPLATE).convert("RGBA")
+    button_frame(row, (13, 38, 20), inset=17, bottom_inset=17, radius=28).save(
+        os.path.join(ui_dir, "store_row.b40.png"))
+    print("  Assets/Art/UI/store_row.b40.png")
+
+    # Price pill, with its baked "$1.99" removed.
+    px0, py0 = STORE_PRICE_BUTTON[0], STORE_PRICE_BUTTON[1]
+    price = store.crop(STORE_PRICE_BUTTON).convert("RGB")
+    price = inpaint_diffuse(price, [(STORE_PRICE_TEXT[0] - px0, STORE_PRICE_TEXT[1] - py0,
+                                     STORE_PRICE_TEXT[2] - px0, STORE_PRICE_TEXT[3] - py0)],
+                            iterations=40, radius=12, pad=14)
+    price.convert("RGBA").save(os.path.join(ui_dir, "btn_price.b34.png"))
+    print("  Assets/Art/UI/btn_price.b34.png")
+
+    # One chip stack per pack, keyed off the felt so they sit on any row.
+    for i, box in enumerate(STORE_CHIPS):
+        chip = store.crop(box)
+        # Sample the felt from the bottom-right corner: the top-right of row 2 is ribbon.
+        keyed = key_out_background(
+            chip, (chip.width - 26, chip.height - 26, chip.width - 2, chip.height - 2))
+        keyed.save(os.path.join(ui_dir, f"chips_{i}.png"))
+    print(f"  Assets/Art/UI/chips_0..{len(STORE_CHIPS) - 1}.png")
+
+    ribbon = store.crop(STORE_RIBBON)
+    key_out_background(ribbon, (ribbon.width - 26, ribbon.height - 26,
+                                ribbon.width - 2, ribbon.height - 2)).save(
+        os.path.join(ui_dir, "badge_best_value.png"))
+    print("  Assets/Art/UI/badge_best_value.png")
+
+
 def cut(src, box, out_path, resize=None):
     piece = src.crop(box).convert("RGBA")
     if resize:
@@ -258,6 +387,13 @@ def main():
     # Back arrow, lifted from the store render's top bar.
     store = Image.open(os.path.join(ROOT, "docs", "screenshots", "store.png")).convert("RGB")
     cut(store, (26, 36, 106, 112), os.path.join(UI_DIR, "icon_back.png"))
+
+    print("store:")
+    extract_store(store, UI_DIR, TABLE_DIR)
+
+    print("menu:")
+    menu = Image.open(os.path.join(ROOT, "docs", "screenshots", "main-menu.png")).convert("RGB")
+    extract_menu(menu, TABLE_DIR)
 
     print("done")
 
