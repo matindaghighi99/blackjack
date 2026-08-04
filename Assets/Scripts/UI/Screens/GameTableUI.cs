@@ -1,17 +1,18 @@
 using System.Collections.Generic;
-using System.Text;
 using BlackjackGame.Blackjack;
+using BlackjackGame.Blackjack.Cards;
 using BlackjackGame.Core;
+using BlackjackGame.UI.Components;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BlackjackGame.UI.Screens
 {
     /// <summary>
-    /// Basic game-table layout and controls. Renders hands as text placeholders (swap for
-    /// card sprites/prefabs later) and enables/disables action buttons based on the
-    /// engine's legal-move flags. UI stays declarative: it reflects engine state, never
-    /// duplicates rules.
+    /// Game-table layout and controls. Hands are drawn as card sprites via
+    /// <see cref="HandView"/>; the labels carry only the totals. Action buttons are
+    /// enabled straight from the engine's legal-move flags, so the UI reflects engine
+    /// state and never duplicates rules.
     /// </summary>
     public sealed class GameTableUI : MonoBehaviour
     {
@@ -24,6 +25,10 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private Button _standButton;
         [SerializeField] private Button _doubleButton;
         [SerializeField] private Button _splitButton;
+
+        [Header("Cards")]
+        [SerializeField] private HandView _dealerHandView;
+        [SerializeField] private HandView _playerHandView;
 
         [Header("Display")]
         [SerializeField] private Text _dealerHandLabel;
@@ -70,6 +75,10 @@ namespace BlackjackGame.UI.Screens
             {
                 SetActionsInteractable(false);
                 if (_dealButton != null) _dealButton.interactable = true;
+                if (_dealerHandView != null) _dealerHandView.Clear();
+                if (_playerHandView != null) _playerHandView.Clear();
+                if (_dealerHandLabel != null) _dealerHandLabel.text = "Dealer";
+                if (_playerHandLabel != null) _playerHandLabel.text = "Place your bet";
                 return;
             }
 
@@ -87,39 +96,77 @@ namespace BlackjackGame.UI.Screens
 
         private void RenderHands(BlackjackEngine engine)
         {
+            // While the player is still acting the hole card stays face down, and the
+            // dealer total shown is only what the player can actually see. Showing the
+            // real total here would leak the hidden card.
+            bool concealHole = engine.Phase == RoundPhase.PlayerTurn
+                               && engine.DealerHand.Cards.Count > 1;
+
+            if (_dealerHandView != null)
+                _dealerHandView.Render(engine.DealerHand.Cards, concealHole ? 1 : -1);
+
             if (_dealerHandLabel != null)
-                _dealerHandLabel.text = $"Dealer ({engine.DealerHand.Value}): {Describe(engine.DealerHand.Cards)}";
+            {
+                _dealerHandLabel.text = concealHole
+                    ? $"Dealer  {VisibleValue(engine.DealerHand.Cards, 1)} + ?"
+                    : $"Dealer  {engine.DealerHand.Value}";
+            }
+
+            Hand active = engine.ActiveHand;
+            if (active == null && engine.PlayerHands.Count > 0) active = engine.PlayerHands[0];
+            if (active == null) return;
+
+            if (_playerHandView != null) _playerHandView.Render(active.Cards);
 
             if (_playerHandLabel != null)
             {
-                var sb = new StringBuilder();
-                for (int i = 0; i < engine.PlayerHands.Count; i++)
-                {
-                    var h = engine.PlayerHands[i];
-                    string marker = (h == engine.ActiveHand) ? "▶ " : "  ";
-                    sb.AppendLine($"{marker}Hand {i + 1} ({h.Value}): {Describe(h.Cards)}  [bet {h.Bet}]");
-                }
-                _playerHandLabel.text = sb.ToString();
+                string prefix = engine.PlayerHands.Count > 1
+                    ? $"Hand {IndexOfHand(engine, active) + 1}/{engine.PlayerHands.Count}  -  "
+                    : "";
+                string total = active.IsBust ? "BUST" : active.Value.ToString();
+                string soft = !active.IsBust && active.IsSoft ? " soft" : "";
+                _playerHandLabel.text = $"{prefix}You  {total}{soft}  -  bet {active.Bet:N0}";
             }
         }
 
-        private static string Describe(IReadOnlyList<Blackjack.Cards.Card> cards)
+        private static int IndexOfHand(BlackjackEngine engine, Hand hand)
         {
-            var sb = new StringBuilder();
-            foreach (var c in cards) sb.Append(c.ShortCode).Append(' ');
-            return sb.ToString().Trim();
+            for (int i = 0; i < engine.PlayerHands.Count; i++)
+                if (ReferenceEquals(engine.PlayerHands[i], hand)) return i;
+            return 0;
+        }
+
+        /// <summary>Total of just the first <paramref name="count"/> cards.</summary>
+        private static int VisibleValue(IReadOnlyList<Card> cards, int count)
+        {
+            var visible = new List<Card>(count);
+            for (int i = 0; i < count && i < cards.Count; i++) visible.Add(cards[i]);
+            return HandEvaluator.Evaluate(visible).Value;
         }
 
         private void ShowOutcome(BlackjackEngine engine)
         {
             if (_outcomeLabel == null) return;
-            var sb = new StringBuilder();
-            foreach (var h in engine.PlayerHands)
+
+            if (engine.PlayerHands.Count == 1)
             {
-                // Recompute a friendly label from value vs dealer for display only.
-                sb.Append(h.IsBust ? "Bust  " : $"{h.Value}  ");
+                Hand hand = engine.PlayerHands[0];
+                _outcomeLabel.text =
+                    hand.IsBust ? "Bust" :
+                    engine.DealerHand.IsBust ? "Dealer busts - you win" :
+                    hand.IsBlackjack && !engine.DealerHand.IsBlackjack ? "Blackjack!" :
+                    hand.Value > engine.DealerHand.Value ? "You win" :
+                    hand.Value < engine.DealerHand.Value ? "Dealer wins" : "Push";
+                return;
             }
-            _outcomeLabel.text = $"Round over — {sb}".Trim();
+
+            var parts = new List<string>(engine.PlayerHands.Count);
+            for (int i = 0; i < engine.PlayerHands.Count; i++)
+            {
+                Hand hand = engine.PlayerHands[i];
+                parts.Add($"H{i + 1} {(hand.IsBust ? "bust" : hand.Value.ToString())}");
+            }
+            _outcomeLabel.text = string.Join("   ", parts);
         }
 
         private void SetActionsInteractable(bool value)

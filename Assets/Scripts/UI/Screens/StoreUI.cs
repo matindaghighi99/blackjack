@@ -68,7 +68,7 @@ namespace BlackjackGame.UI.Screens
             foreach (ChipPack pack in _store.AvailablePacks)
             {
                 ChipPack captured = pack; // avoid closure capture bug
-                Button button = Instantiate(_packButtonPrefab, _packListRoot);
+                Button button = Instantiate(_packButtonPrefab, _packListRoot, false);
                 var label = button.GetComponentInChildren<Text>();
                 if (label != null)
                 {

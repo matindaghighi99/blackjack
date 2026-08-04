@@ -1,6 +1,7 @@
 using System.Collections;
 using BlackjackGame.Blackjack;
 using BlackjackGame.Core;
+using BlackjackGame.UI.Components;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -110,8 +111,27 @@ namespace BlackjackGame.PlayTests
             Assert.AreEqual(2, game.Engine.PlayerHands[0].Cards.Count, "Player should hold two cards.");
             Assert.GreaterOrEqual(game.Engine.DealerHand.Cards.Count, 1);
 
+            // Cards must actually be drawn, not just held in the engine.
+            var dealerCards = FindUI<HandView>("DealerHandView");
+            var playerCards = FindUI<HandView>("PlayerHandView");
+            Assert.AreEqual(2, playerCards.VisibleCardCount, "Player's cards were not rendered.");
+            Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount,
+                "Dealer's cards were not rendered.");
+
             if (game.Engine.Phase == RoundPhase.PlayerTurn)
             {
+                // The hole card must stay face down, and the label must not leak the total.
+                if (game.Engine.DealerHand.Cards.Count > 1)
+                {
+                    Image[] shown = dealerCards.GetComponentsInChildren<Image>();
+                    Assert.GreaterOrEqual(shown.Length, 2);
+                    Assert.IsNotNull(shown[1].sprite, "Hole card has no sprite.");
+                    StringAssert.Contains("Back", shown[1].sprite.name,
+                        "Dealer's hole card should be face down during the player's turn.");
+                    StringAssert.Contains("?", FindUI<Text>("DealerHandLabel").text,
+                        "Dealer label leaks the hidden card's value.");
+                }
+
                 // Stake debited, round in progress.
                 Assert.AreEqual(balanceBeforeDeal - TestBet, chips.Balance,
                     "Placing a bet should debit exactly the bet amount.");
@@ -144,6 +164,14 @@ namespace BlackjackGame.PlayTests
             StringAssert.StartsWith("Chips:", balanceLabel.text, "Table balance label not refreshed.");
             Assert.IsNotEmpty(FindUI<Text>("DealerHandLabel").text);
             Assert.IsNotEmpty(FindUI<Text>("PlayerHandLabel").text);
+
+            // Once settled the dealer's hand is fully revealed.
+            Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount);
+            foreach (Image card in dealerCards.GetComponentsInChildren<Image>())
+                Assert.IsFalse(card.sprite != null && card.sprite.name.Contains("Back"),
+                    "Dealer still has a face-down card after the round settled.");
+            StringAssert.DoesNotContain("?", FindUI<Text>("DealerHandLabel").text);
+            Assert.IsNotEmpty(FindUI<Text>("OutcomeLabel").text, "No outcome was shown.");
         }
 
         [UnityTest]
