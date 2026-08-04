@@ -3,6 +3,7 @@ using BlackjackGame.Blackjack;
 using BlackjackGame.Core;
 using BlackjackGame.UI.Components;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -70,7 +71,7 @@ namespace BlackjackGame.PlayTests
             Assert.IsNotNull(AppManager.Instance.Rewards);
             Assert.IsNotNull(AppManager.Instance.Store);
 
-            var balanceLabel = FindUI<Text>("BalanceLabel");
+            var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
             Assert.IsNotEmpty(balanceLabel.text, "Main menu balance label was never populated.");
 
             // The three routing buttons exist, are wired into the scene and are clickable.
@@ -84,7 +85,7 @@ namespace BlackjackGame.PlayTests
             // Claiming the daily reward must always leave a message on the status label.
             FindUI<Button>("RewardsButton").onClick.Invoke();
             yield return null;
-            Assert.IsNotEmpty(FindUI<Text>("RewardStatusLabel").text,
+            Assert.IsNotEmpty(FindUI<TMP_Text>("RewardStatusLabel").text,
                 "Reward status label was not updated after claiming.");
         }
 
@@ -98,7 +99,7 @@ namespace BlackjackGame.PlayTests
             Assert.IsTrue(GameManager.Exists, "GameManager missing from the Game scene.");
             GameManager game = GameManager.Instance;
 
-            var betInput = FindUI<InputField>("BetInput");
+            var betInput = FindUI<TMP_InputField>("BetInput");
             Assert.AreEqual(TestBet.ToString(), betInput.text,
                 "Bet field should be pre-filled so Deal works with no typing.");
 
@@ -128,7 +129,7 @@ namespace BlackjackGame.PlayTests
                     Assert.IsNotNull(shown[1].sprite, "Hole card has no sprite.");
                     StringAssert.Contains("Back", shown[1].sprite.name,
                         "Dealer's hole card should be face down during the player's turn.");
-                    StringAssert.Contains("?", FindUI<Text>("DealerHandLabel").text,
+                    StringAssert.Contains("?", FindUI<TMP_Text>("DealerHandLabel").text,
                         "Dealer label leaks the hidden card's value.");
                 }
 
@@ -160,18 +161,18 @@ namespace BlackjackGame.PlayTests
 
             Assert.AreEqual(RoundPhase.Settled, game.Engine.Phase, "Round never settled.");
 
-            var balanceLabel = FindUI<Text>("BalanceLabel");
+            var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
             StringAssert.StartsWith("Chips:", balanceLabel.text, "Table balance label not refreshed.");
-            Assert.IsNotEmpty(FindUI<Text>("DealerHandLabel").text);
-            Assert.IsNotEmpty(FindUI<Text>("PlayerHandLabel").text);
+            Assert.IsNotEmpty(FindUI<TMP_Text>("DealerHandLabel").text);
+            Assert.IsNotEmpty(FindUI<TMP_Text>("PlayerHandLabel").text);
 
             // Once settled the dealer's hand is fully revealed.
             Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount);
             foreach (Image card in dealerCards.GetComponentsInChildren<Image>())
                 Assert.IsFalse(card.sprite != null && card.sprite.name.Contains("Back"),
                     "Dealer still has a face-down card after the round settled.");
-            StringAssert.DoesNotContain("?", FindUI<Text>("DealerHandLabel").text);
-            Assert.IsNotEmpty(FindUI<Text>("OutcomeLabel").text, "No outcome was shown.");
+            StringAssert.DoesNotContain("?", FindUI<TMP_Text>("DealerHandLabel").text);
+            Assert.IsNotEmpty(FindUI<TMP_Text>("OutcomeLabel").text, "No outcome was shown.");
         }
 
         [UnityTest]
@@ -197,7 +198,7 @@ namespace BlackjackGame.PlayTests
 
             // In the editor AppManager selects MockPurchaseService, which resolves synchronously.
             Assert.Greater(chips.Balance, before, "Mock purchase did not grant chips.");
-            Assert.IsNotEmpty(FindUI<Text>("StatusLabel").text, "Store status label not updated.");
+            Assert.IsNotEmpty(FindUI<TMP_Text>("StatusLabel").text, "Store status label not updated.");
         }
     }
 }

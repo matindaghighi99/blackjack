@@ -1,20 +1,20 @@
 using BlackjackGame.Core;
+using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BlackjackGame.UI.Components
 {
     /// <summary>
-    /// Drop-in reusable label that always shows the live chip balance. Attach to any Text
+    /// Drop-in reusable label that always shows the live chip balance. Attach to any TextMeshPro label
     /// and it self-subscribes to balance changes — reused across menu, table and store.
     /// </summary>
-    [RequireComponent(typeof(Text))]
+    [RequireComponent(typeof(TextMeshProUGUI))]
     public sealed class ChipBalanceView : MonoBehaviour
     {
         [SerializeField] private string _format = "{0:N0}";
-        private Text _label;
+        private TMP_Text _label;
 
-        private void Awake() => _label = GetComponent<Text>();
+        private void Awake() => _label = GetComponent<TMP_Text>();
 
         private void OnEnable()
         {

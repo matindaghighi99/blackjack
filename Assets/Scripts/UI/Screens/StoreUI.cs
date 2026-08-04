@@ -1,6 +1,7 @@
 using BlackjackGame.Config;
 using BlackjackGame.Core;
 using BlackjackGame.Economy;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,8 +23,8 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private Button _packButtonPrefab;
 
         [Header("Display")]
-        [SerializeField] private Text _balanceLabel;
-        [SerializeField] private Text _statusLabel;
+        [SerializeField] private TMP_Text _balanceLabel;
+        [SerializeField] private TMP_Text _statusLabel;
 
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
@@ -69,7 +70,7 @@ namespace BlackjackGame.UI.Screens
             {
                 ChipPack captured = pack; // avoid closure capture bug
                 Button button = Instantiate(_packButtonPrefab, _packListRoot, false);
-                var label = button.GetComponentInChildren<Text>();
+                var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null)
                 {
                     int total = captured.ChipAmount + captured.BonusChips;

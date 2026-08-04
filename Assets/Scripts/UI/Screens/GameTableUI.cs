@@ -3,6 +3,7 @@ using BlackjackGame.Blackjack;
 using BlackjackGame.Blackjack.Cards;
 using BlackjackGame.Core;
 using BlackjackGame.UI.Components;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -17,7 +18,7 @@ namespace BlackjackGame.UI.Screens
     public sealed class GameTableUI : MonoBehaviour
     {
         [Header("Bet Controls")]
-        [SerializeField] private InputField _betInput;
+        [SerializeField] private TMP_InputField _betInput;
         [SerializeField] private Button _dealButton;
 
         [Header("Action Buttons")]
@@ -31,10 +32,10 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private HandView _playerHandView;
 
         [Header("Display")]
-        [SerializeField] private Text _dealerHandLabel;
-        [SerializeField] private Text _playerHandLabel;
-        [SerializeField] private Text _outcomeLabel;
-        [SerializeField] private Text _balanceLabel;
+        [SerializeField] private TMP_Text _dealerHandLabel;
+        [SerializeField] private TMP_Text _playerHandLabel;
+        [SerializeField] private TMP_Text _outcomeLabel;
+        [SerializeField] private TMP_Text _balanceLabel;
 
         [Header("Navigation")]
         [SerializeField] private Button _backButton;

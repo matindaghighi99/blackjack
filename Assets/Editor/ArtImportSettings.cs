@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.IO;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -15,6 +18,14 @@ namespace BlackjackGame.EditorTools
     {
         private const string ArtRoot = "Assets/Art/";
 
+        /// <summary>
+        /// A filename ending in ".b&lt;N&gt;" declares an N-pixel nine-slice border,
+        /// e.g. <c>btn_green.b56.png</c>. Encoding it in the name keeps the border with
+        /// the art that was drawn for it, so regenerating the kit can't desync them.
+        /// </summary>
+        private static readonly Regex BorderSuffix =
+            new Regex(@"\.b(\d+)$", RegexOptions.Compiled);
+
         private void OnPreprocessTexture()
         {
             string path = assetPath.Replace('\\', '/');
@@ -31,6 +42,14 @@ namespace BlackjackGame.EditorTools
             importer.maxTextureSize = 2048;
             // UI art is read at close to 1:1, so block compression artefacts would show.
             importer.textureCompression = TextureImporterCompression.Uncompressed;
+
+            Match m = BorderSuffix.Match(Path.GetFileNameWithoutExtension(path));
+            if (m.Success &&
+                int.TryParse(m.Groups[1].Value, NumberStyles.Integer,
+                             CultureInfo.InvariantCulture, out int b))
+            {
+                importer.spriteBorder = new Vector4(b, b, b, b);
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using BlackjackGame.Core;
 using BlackjackGame.Economy;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,8 +19,8 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private Button _rewardsButton;
 
         [Header("Labels")]
-        [SerializeField] private Text _balanceLabel;
-        [SerializeField] private Text _rewardStatusLabel;
+        [SerializeField] private TMP_Text _balanceLabel;
+        [SerializeField] private TMP_Text _rewardStatusLabel;
 
         private void Start()
         {
