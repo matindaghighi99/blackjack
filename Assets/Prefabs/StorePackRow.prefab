@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 6145086180740734930}
   - component: {fileID: 8017790553380036015}
   - component: {fileID: 5856558444068167957}
+  - component: {fileID: 5855719762548599757}
   - component: {fileID: 7504021583541601553}
   m_Layer: 0
   m_Name: StorePackRow
@@ -147,6 +148,26 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &5855719762548599757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 345412975567152717}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0af977249c4c7ed45b8e1056b9de4fac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: BlackjackGame::BlackjackGame.UI.Components.ButtonJuice
+  _hoverScale: 1.04
+  _pressScale: 0.93
+  _responseSpeed: 14
+  _glow: {fileID: 0}
+  _glowMinAlpha: 0.15
+  _glowMaxAlpha: 0.55
+  _glowSpeed: 2.6
+  _disabledScale: 0.94
 --- !u!114 &7504021583541601553
 MonoBehaviour:
   m_ObjectHideFlags: 0
