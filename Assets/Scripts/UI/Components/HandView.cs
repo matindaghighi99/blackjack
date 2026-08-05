@@ -82,6 +82,15 @@ namespace BlackjackGame.UI.Components
         private readonly List<Image> _shadows = new List<Image>();
         private readonly List<CardMotion> _motion = new List<CardMotion>();
 
+        // ---- Emphasis (split hands) ------------------------------------------
+        // The hand being played sits at full size and full colour; the waiting split
+        // hand recedes — slightly smaller and dimmed — so the eye always knows which
+        // cards the buttons act on. Eased rather than snapped, like everything else.
+        private float _emphasisScaleTarget = 1f;
+        private float _emphasisDimTarget = 1f;
+        private float _emphasisScale = 1f;
+        private float _emphasisDim = 1f;
+
         /// <summary>Per-card animation state. Driven from Update, not coroutines.</summary>
         private sealed class CardMotion
         {
@@ -128,6 +137,41 @@ namespace BlackjackGame.UI.Components
 
         /// <summary>How many cards are currently displayed. Handy for tests.</summary>
         public int VisibleCardCount { get; private set; }
+
+        /// <summary>
+        /// Marks this view as the hand in play (full size, full colour) or the hand
+        /// waiting its turn (smaller, dimmed). <paramref name="instant"/> skips the
+        /// ease — used when a view is first shown so it doesn't animate from nothing.
+        /// </summary>
+        public void SetEmphasis(bool active, bool instant = false)
+        {
+            _emphasisScaleTarget = active ? 1f : 0.88f;
+            _emphasisDimTarget = active ? 1f : 0.58f;
+            if (instant)
+            {
+                _emphasisScale = _emphasisScaleTarget;
+                _emphasisDim = _emphasisDimTarget;
+                ApplyEmphasis();
+            }
+        }
+
+        private void ApplyEmphasis()
+        {
+            if (_cardRoot != null)
+                _cardRoot.localScale = new Vector3(_emphasisScale, _emphasisScale, 1f);
+
+            var tint = new Color(_emphasisDim, _emphasisDim, _emphasisDim, 1f);
+            for (int i = 0; i < _pool.Count; i++)
+            {
+                if (_pool[i] != null) _pool[i].color = tint;
+                if (_shadows[i] != null)
+                {
+                    Color sc = _shadowColor;
+                    sc.a *= Mathf.Lerp(0.5f, 1f, _emphasisDim);
+                    _shadows[i].color = sc;
+                }
+            }
+        }
 
         /// <summary>Hides every card without destroying the pool.</summary>
         public void Clear()
@@ -262,6 +306,10 @@ namespace BlackjackGame.UI.Components
             }
 
             VisibleCardCount = count;
+
+            // Newly pooled cards spawn white; stamp the current emphasis on everything so
+            // a card dealt to a dimmed hand arrives already dimmed.
+            ApplyEmphasis();
         }
 
         private int CountPending()
@@ -274,6 +322,17 @@ namespace BlackjackGame.UI.Components
 
         private void Update()
         {
+            // Ease the split-hand emphasis toward its target. Applied every frame it
+            // moves so pooled cards created mid-ease still pick the tint up.
+            if (!Mathf.Approximately(_emphasisScale, _emphasisScaleTarget) ||
+                !Mathf.Approximately(_emphasisDim, _emphasisDimTarget))
+            {
+                float k = 1f - Mathf.Exp(-9f * Time.deltaTime);
+                _emphasisScale = Mathf.Lerp(_emphasisScale, _emphasisScaleTarget, k);
+                _emphasisDim = Mathf.Lerp(_emphasisDim, _emphasisDimTarget, k);
+                ApplyEmphasis();
+            }
+
             for (int i = 0; i < _pool.Count; i++)
             {
                 CardMotion m = _motion[i];

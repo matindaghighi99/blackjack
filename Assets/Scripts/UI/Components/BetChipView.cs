@@ -45,6 +45,9 @@ namespace BlackjackGame.UI.Components
         private float _t;
         private float _land;
 
+        /// <summary>Where the current inbound flight started (pill or a chip button).</summary>
+        private Vector2 _flightOrigin;
+
         private void Awake()
         {
             _rect = (RectTransform)transform;
@@ -77,9 +80,47 @@ namespace BlackjackGame.UI.Components
         public void PlaceBet(long amount)
         {
             SetAmount(amount);
+            _flightOrigin = _flyFrom;
             _mode = Mode.Placing;
             _t = 0f;
             _land = 0f;
+            if (_group != null) _group.alpha = 1f;
+            Apply();
+        }
+
+        /// <summary>True while the chip is on the felt (arriving or resting).</summary>
+        public bool IsOnTable => _mode == Mode.Placing || _mode == Mode.Resting;
+
+        /// <summary>
+        /// Grows the stake while the player is still building it: the first denomination
+        /// tap throws the chip in from that button; later taps update the number and give
+        /// the stack a little settle-kick, as if another chip just landed on it.
+        /// </summary>
+        public void ShowPreview(long amount, Vector2 fromCanvasPosition)
+        {
+            SetAmount(amount);
+
+            if (_mode == Mode.Hidden || _mode == Mode.Returning || _mode == Mode.Losing)
+            {
+                _flightOrigin = fromCanvasPosition;
+                _mode = Mode.Placing;
+                _t = 0f;
+                _land = 0f;
+                if (_group != null) _group.alpha = 1f;
+                Apply();
+            }
+            else
+            {
+                Punch();
+            }
+        }
+
+        /// <summary>A settle-kick on the resting chip — another chip hitting the stack.</summary>
+        public void Punch()
+        {
+            if (_mode == Mode.Placing) return; // already animating in
+            _mode = Mode.Resting;
+            _land = 1f;
             if (_group != null) _group.alpha = 1f;
             Apply();
         }
@@ -89,6 +130,12 @@ namespace BlackjackGame.UI.Components
         {
             if (_label != null) _label.text = amount.ToString("N0");
         }
+
+        /// <summary>
+        /// Points the "home" end of flights at the balance pill's real position on this
+        /// device (safe area shifts it), replacing the baked reference-canvas guess.
+        /// </summary>
+        public void SetPillPosition(Vector2 canvasPosition) => _flyFrom = canvasPosition;
 
         /// <summary>
         /// Settles the round: a won stake flies back to the balance, a lost one is swept
@@ -137,7 +184,7 @@ namespace BlackjackGame.UI.Components
             if (_rect == null) return;
 
             bool outbound = _mode == Mode.Placing;
-            Vector2 from = outbound ? _flyFrom : _rest;
+            Vector2 from = outbound ? _flightOrigin : _rest;
             Vector2 to = outbound ? _rest : (_mode == Mode.Losing ? _loseTo : _flyFrom);
 
             // Ease-out on the way in so the chip decelerates onto its spot; ease-in on the

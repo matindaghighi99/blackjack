@@ -14,6 +14,8 @@ namespace BlackjackGame.UI.Components
     {
         private const string MutedPrefKey = "audio_muted";
 
+        [Tooltip("The dimmed layer behind the frame; tapping it dismisses the panel.")]
+        [SerializeField] private Button _backdropButton;
         [SerializeField] private Button _closeButton;
         [SerializeField] private Button _muteButton;
         [SerializeField] private TMP_Text _muteLabel;
@@ -27,6 +29,8 @@ namespace BlackjackGame.UI.Components
         private void Awake()
         {
             if (_closeButton != null) _closeButton.onClick.AddListener(Hide);
+            // Tapping outside the frame closes the panel — the gesture everyone tries first.
+            if (_backdropButton != null) _backdropButton.onClick.AddListener(Hide);
             if (_muteButton != null) _muteButton.onClick.AddListener(ToggleMute);
             if (_resetButton != null) _resetButton.onClick.AddListener(OnResetClicked);
 

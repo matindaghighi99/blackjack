@@ -34,6 +34,17 @@ namespace BlackjackGame.UI.Screens
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
 
+        [Header("Purchase Flow")]
+        [Tooltip("Full-screen veil shown while the billing flow runs; blocks double-taps.")]
+        [SerializeField] private GameObject _processingOverlay;
+        [Tooltip("Celebration modal shown when a purchase lands.")]
+        [SerializeField] private GameObject _successPanel;
+        [Tooltip("The chip amount line inside the success modal.")]
+        [SerializeField] private TMP_Text _successAmountLabel;
+        [SerializeField] private Button _successCloseButton;
+        [Tooltip("Dimmed layer behind the success modal; tapping it dismisses too.")]
+        [SerializeField] private Button _successBackdropButton;
+
         [Header("Quick Actions (top bar)")]
         [SerializeField] private Button _giftButton;
         [SerializeField] private Button _settingsButton;
@@ -52,8 +63,12 @@ namespace BlackjackGame.UI.Screens
         private void Start()
         {
             if (_backButton != null)
-                _backButton.onClick.AddListener(() =>
-                    UnityEngine.SceneManagement.SceneManager.LoadScene(SceneNames.MainMenu));
+                _backButton.onClick.AddListener(() => SceneFader.TransitionTo(SceneNames.MainMenu));
+
+            if (_successCloseButton != null) _successCloseButton.onClick.AddListener(HideSuccess);
+            if (_successBackdropButton != null) _successBackdropButton.onClick.AddListener(HideSuccess);
+            if (_processingOverlay != null) _processingOverlay.SetActive(false);
+            if (_successPanel != null) _successPanel.SetActive(false);
 
             if (_giftButton != null) _giftButton.onClick.AddListener(ClaimGift);
             if (_settingsButton != null && _settingsPanel != null)
@@ -143,11 +158,16 @@ namespace BlackjackGame.UI.Screens
         private void Purchase(string packId)
         {
             SetStatus("Processing purchase…");
+            // The overlay freezes the screen for the duration of the billing flow —
+            // no double-buying, no wandering off mid-transaction.
+            if (_processingOverlay != null) _processingOverlay.SetActive(true);
             _store.PurchasePack(packId); // result arrives via OnPurchaseCompleted
         }
 
         private void HandlePurchaseCompleted(PurchaseResult result)
         {
+            if (_processingOverlay != null) _processingOverlay.SetActive(false);
+
             SetStatus(result.Message);
             if (_statusPunch != null)
             {
@@ -156,6 +176,20 @@ namespace BlackjackGame.UI.Screens
                     result.Success ? 1f : 0.4f);
             }
             RefreshBalance();
+
+            // A purchase is the one moment this screen exists for — it gets a modal,
+            // not just a status line. PanelPop on the frame springs it in.
+            if (result.Success && _successPanel != null)
+            {
+                if (_successAmountLabel != null)
+                    _successAmountLabel.text = $"+{result.ChipsGranted:N0} CHIPS";
+                _successPanel.SetActive(true);
+            }
+        }
+
+        private void HideSuccess()
+        {
+            if (_successPanel != null) _successPanel.SetActive(false);
         }
 
         private void HandleStoreReady() => SetStatus("");

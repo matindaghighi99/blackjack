@@ -12,6 +12,8 @@ namespace BlackjackGame.UI.Components
     /// </summary>
     public sealed class StatsPanel : MonoBehaviour
     {
+        [Tooltip("The dimmed layer behind the frame; tapping it dismisses the panel.")]
+        [SerializeField] private Button _backdropButton;
         [SerializeField] private Button _closeButton;
         [SerializeField] private TMP_Text _levelLabel;
         [SerializeField] private TMP_Text _handsLabel;
@@ -22,6 +24,8 @@ namespace BlackjackGame.UI.Components
         private void Awake()
         {
             if (_closeButton != null) _closeButton.onClick.AddListener(Hide);
+            // Tapping outside the frame closes the panel — the gesture everyone tries first.
+            if (_backdropButton != null) _backdropButton.onClick.AddListener(Hide);
         }
 
         public void Show()

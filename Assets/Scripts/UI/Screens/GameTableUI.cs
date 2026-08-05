@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using BlackjackGame.Blackjack;
 using BlackjackGame.Blackjack.Cards;
@@ -12,20 +13,28 @@ using UnityEngine.UI;
 namespace BlackjackGame.UI.Screens
 {
     /// <summary>
-    /// Game-table layout and controls. Hands are drawn as card sprites via
-    /// <see cref="HandView"/>; the labels carry only the totals. Action buttons are
-    /// enabled straight from the engine's legal-move flags, so the UI reflects engine
-    /// state and never duplicates rules.
+    /// Game-table layout and controls.
+    ///
+    /// Betting is chip-first: tapping a denomination throws chips onto the felt and the
+    /// stake accumulates there — no keyboard, ever. The resting stack is tappable to
+    /// clear, and the last stake is re-placed automatically after a round so DEAL alone
+    /// repeats it.
+    ///
+    /// Settling is paced by <see cref="SettleSequence"/>: the hole card turns, the
+    /// dealer draws card by card, and only then does the outcome land — the engine
+    /// resolves instantly, but the table never lets the answer arrive before the story.
+    ///
+    /// Split hands each get their own <see cref="HandView"/> with a result badge; the
+    /// hand in play is emphasised, the waiting one recedes.
     /// </summary>
     public sealed class GameTableUI : MonoBehaviour
     {
         [Header("Bet Controls")]
-        [SerializeField] private TMP_InputField _betInput;
+        [Tooltip("Denomination chip buttons, smallest to largest.")]
+        [SerializeField] private Button[] _chipButtons;
+        [Tooltip("Chip values matching _chipButtons, index for index.")]
+        [SerializeField] private int[] _chipValues = { 100, 500, 1000, 5000 };
         [SerializeField] private Button _dealButton;
-        [SerializeField] private Button _betMinusButton;
-        [SerializeField] private Button _betPlusButton;
-        [Tooltip("How much one tap of - or + moves the stake.")]
-        [SerializeField] private int _betStep = 100;
 
         [Header("Row Swapping")]
         [Tooltip("Betting controls — shown between rounds.")]
@@ -41,7 +50,15 @@ namespace BlackjackGame.UI.Screens
 
         [Header("Cards")]
         [SerializeField] private HandView _dealerHandView;
+        [Tooltip("The single-hand view, centred on the felt.")]
         [SerializeField] private HandView _playerHandView;
+        [Tooltip("Left and right views used while a split is in play.")]
+        [SerializeField] private HandView _splitHandLeft;
+        [SerializeField] private HandView _splitHandRight;
+
+        [Header("Split Badges")]
+        [SerializeField] private TMP_Text _splitBadgeLeft;
+        [SerializeField] private TMP_Text _splitBadgeRight;
 
         [Header("Display")]
         [SerializeField] private TMP_Text _dealerHandLabel;
@@ -51,9 +68,12 @@ namespace BlackjackGame.UI.Screens
 
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
+        [Tooltip("The + on the balance pill — shortcut to the chip store.")]
+        [SerializeField] private Button _addChipsButton;
 
         [Header("Quick Actions (top bar)")]
         [SerializeField] private Button _giftButton;
+        [SerializeField] private PulsingDot _giftDot;
         [SerializeField] private Button _settingsButton;
         [SerializeField] private Button _trophyButton;
         [SerializeField] private SettingsPanel _settingsPanel;
@@ -66,8 +86,16 @@ namespace BlackjackGame.UI.Screens
         [SerializeField] private LabelPunch _outcomePunch;
         [Tooltip("Shakes the table on blackjacks and busts.")]
         [SerializeField] private ScreenShake _shake;
-        [Tooltip("The stake on the felt — flies out on a bet, back on a win.")]
+        [Tooltip("The stake on the felt — grows as chips are tapped, settles with the round.")]
         [SerializeField] private BetChipView _betChip;
+        [Tooltip("Button layered on the bet chip so the resting stack can be tapped clear.")]
+        [SerializeField] private Button _betChipButton;
+
+        [Header("Pacing")]
+        [Tooltip("Pause after the hole card turns, before the dealer draws.")]
+        [SerializeField] private float _revealPause = 0.45f;
+        [Tooltip("Pause between successive dealer draws.")]
+        [SerializeField] private float _drawPause = 0.32f;
 
         /// <summary>Outcome tints. Gold for a blackjack, green win, red loss, grey push.</summary>
         private static readonly Color WinColor = new Color(0.42f, 1f, 0.55f);
@@ -77,13 +105,18 @@ namespace BlackjackGame.UI.Screens
 
         private GameManager _game;
 
-        /// <summary>
-        /// The engine instance the views were last drawn for. GameManager builds a fresh
-        /// engine per round, so a change here means "new round" — which is when the hands
-        /// need clearing so the next Render deals the cards in rather than snapping them.
-        /// </summary>
+        /// <summary>The engine instance the views were last drawn for; a change means "new round".</summary>
         private BlackjackEngine _renderedEngine;
 
+        /// <summary>Results delivered by <see cref="GameManager.OnRoundComplete"/> for the current round.</summary>
+        private IReadOnlyList<HandResult> _lastResults;
+
+        private int _currentBet;
+        private int _lastBet;
+        private bool _splitLayout;
+
+        /// <summary>True while the settle sequence coroutine owns the table.</summary>
+        private bool _settling;
         /// <summary>True once this round's outcome reaction has played, so it fires once.</summary>
         private bool _outcomeShown;
 
@@ -96,10 +129,23 @@ namespace BlackjackGame.UI.Screens
             if (_standButton != null) _standButton.onClick.AddListener(() => { _game.Stand(); Refresh(); });
             if (_doubleButton != null) _doubleButton.onClick.AddListener(() => { _game.DoubleDown(); Refresh(); });
             if (_splitButton != null) _splitButton.onClick.AddListener(() => { _game.Split(); Refresh(); });
-            if (_backButton != null) _backButton.onClick.AddListener(() => _game.GoToScene(SceneNames.MainMenu));
+            if (_backButton != null)
+                _backButton.onClick.AddListener(() => _game.GoToScene(SceneNames.MainMenu));
+            if (_addChipsButton != null)
+                _addChipsButton.onClick.AddListener(() => _game.GoToScene(SceneNames.Store));
 
-            if (_betMinusButton != null) _betMinusButton.onClick.AddListener(() => AdjustBet(-_betStep));
-            if (_betPlusButton != null) _betPlusButton.onClick.AddListener(() => AdjustBet(_betStep));
+            if (_chipButtons != null)
+            {
+                for (int i = 0; i < _chipButtons.Length; i++)
+                {
+                    int index = i; // avoid closure capture bug
+                    if (_chipButtons[i] != null)
+                        _chipButtons[i].onClick.AddListener(() => OnChipTapped(index));
+                }
+            }
+            // The stake itself is the display: it grows on the felt as chips are
+            // tapped, and tapping it clears the bet.
+            if (_betChipButton != null) _betChipButton.onClick.AddListener(ClearBet);
 
             if (_giftButton != null) _giftButton.onClick.AddListener(ClaimGift);
             if (_settingsButton != null && _settingsPanel != null)
@@ -107,40 +153,28 @@ namespace BlackjackGame.UI.Screens
             if (_trophyButton != null && _statsPanel != null)
                 _trophyButton.onClick.AddListener(_statsPanel.Show);
 
-            if (_game != null) _game.OnRoundComplete += _ => Refresh();
+            if (_game != null)
+                _game.OnRoundComplete += results => { _lastResults = results; Refresh(); };
 
+            // The chip flies home to wherever the balance pill actually is on this
+            // device, safe area included — not to a baked reference-canvas guess.
+            if (_betChip != null && _balanceLabel != null)
+                _betChip.SetPillPosition(ToChipSpace(_balanceLabel.rectTransform));
+
+            RefreshGiftDot();
             Refresh();
         }
 
-        /// <summary>
-        /// Same claim flow as the Main Menu's daily-reward button, surfaced here as a
-        /// quick action. Result is shown in the outcome label — it's free between rounds
-        /// and gets overwritten by the next round's result either way.
-        /// </summary>
-        private void ClaimGift()
-        {
-            if (!AppManager.Exists || _outcomeLabel == null) return;
+        // =====================================================================
+        //  Betting
+        // =====================================================================
 
-            DailyRewardResult result = AppManager.Instance.Rewards.TryClaim(DateTime.UtcNow);
-            _outcomeLabel.text = result.Success
-                ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
-                : $"Next reward in {result.TimeUntilNext.Hours}h {result.TimeUntilNext.Minutes}m";
-        }
-
-        /// <summary>The stake currently typed in the field, or 100 if it is empty/unparseable.</summary>
-        private int CurrentBet =>
-            _betInput != null && int.TryParse(_betInput.text, out int parsed) ? parsed : 100;
-
-        /// <summary>Lowest legal stake, from config.</summary>
         private int MinBet =>
             AppManager.Exists && AppManager.Instance.GameConfig != null
                 ? AppManager.Instance.GameConfig.MinBet
                 : 1;
 
-        /// <summary>
-        /// Highest legal stake: the configured ceiling, but never more than the player
-        /// actually holds — offering a bet that will be refused is worse than not offering it.
-        /// </summary>
+        /// <summary>Highest stake the player can legally place *and* afford.</summary>
         private int MaxBet
         {
             get
@@ -149,92 +183,562 @@ namespace BlackjackGame.UI.Screens
                     ? AppManager.Instance.GameConfig.MaxBet
                     : int.MaxValue;
                 long affordable = _game != null ? _game.Balance : 0;
-                return (int)Mathf.Min(ceiling, Mathf.Max(MinBet, affordable));
+                return (int)Math.Min(ceiling, Math.Max(0, affordable));
             }
         }
 
-        /// <summary>Nudges the stake by one step, clamped to what is legal and affordable.</summary>
-        private void AdjustBet(int delta)
+        private void OnChipTapped(int index)
         {
-            if (_betInput == null) return;
-            int next = Mathf.Clamp(CurrentBet + delta, MinBet, MaxBet);
-            _betInput.text = next.ToString();
+            if (_settling || RoundInProgress) return;
+            if (_chipValues == null || index >= _chipValues.Length) return;
+
+            int value = _chipValues[index];
+            int next = Mathf.Min(_currentBet + value, MaxBet);
+
+            if (next <= _currentBet)
+            {
+                // Couldn't add even part of the chip — the wall is the balance, not the
+                // table limit, whenever the balance is what's binding.
+                NotEnoughChips();
+                return;
+            }
+
+            _currentBet = next;
+
+            if (_betChip != null)
+            {
+                Vector2 origin = _chipButtons != null && index < _chipButtons.Length && _chipButtons[index] != null
+                    ? ToChipSpace((RectTransform)_chipButtons[index].transform)
+                    : Vector2.zero;
+                _betChip.ShowPreview(_currentBet, origin);
+            }
+
             RefreshBetControls();
         }
 
-        /// <summary>Greys out a stepper once the stake is against its limit.</summary>
-        private void RefreshBetControls()
+        private void ClearBet()
         {
-            int bet = CurrentBet;
-            if (_betMinusButton != null) _betMinusButton.interactable = bet > MinBet;
-            if (_betPlusButton != null) _betPlusButton.interactable = bet < MaxBet;
+            if (_settling || RoundInProgress) return;
+            if (_currentBet == 0) return;
+
+            _currentBet = 0;
+            if (_betChip != null) _betChip.Hide();
+            RefreshBetControls();
         }
 
         private void OnDeal()
         {
-            int bet = 100;
-            if (_betInput != null && int.TryParse(_betInput.text, out var parsed)) bet = parsed;
+            if (_settling || _currentBet < MinBet) return;
 
-            // Only throw the chip if the bet was actually accepted — an unaffordable bet
-            // leaves the balance untouched, so a chip sailing onto the felt would lie.
-            bool placed = _game.PlaceBetAndDeal(bet);
-
+            // Reset the round state BEFORE dealing: an instant blackjack settles inside
+            // PlaceBetAndDeal, and its results event must land on a clean slate rather
+            // than be wiped by resets running after it.
+            _lastResults = null;
+            _outcomeShown = false;
             if (_outcomeLabel != null) _outcomeLabel.text = "";
             if (_outcomePunch != null) _outcomePunch.ResetNow();
-            _outcomeShown = false;
 
-            if (placed && _betChip != null) _betChip.PlaceBet(bet);
+            bool placed = _game.PlaceBetAndDeal(_currentBet);
+            if (!placed)
+            {
+                NotEnoughChips();
+                return;
+            }
+
+            _lastBet = _currentBet;
+
+            // The stake is already resting on the felt from the preview; give the stack
+            // a settle-kick to mark the moment it becomes real.
+            if (_betChip != null) _betChip.Punch();
+            if (_betChipButton != null) _betChipButton.interactable = false;
+
             Refresh();
+        }
+
+        private void NotEnoughChips()
+        {
+            if (_outcomeLabel != null) _outcomeLabel.text = "NOT ENOUGH CHIPS";
+            if (_outcomePunch != null) _outcomePunch.Play(LoseColor, 0.5f);
+            if (_shake != null) _shake.Shake(0.25f);
+        }
+
+        /// <summary>Re-places the last stake (clamped to what's affordable) after a round,
+        /// so a bare DEAL tap repeats the bet.</summary>
+        private void PrefillRebet()
+        {
+            _currentBet = Mathf.Clamp(_lastBet, 0, MaxBet);
+            if (_currentBet < MinBet) _currentBet = 0;
+
+            if (_betChip != null)
+            {
+                if (_currentBet > 0)
+                {
+                    Vector2 origin = _balanceLabel != null
+                        ? ToChipSpace(_balanceLabel.rectTransform)
+                        : Vector2.zero;
+                    _betChip.ShowPreview(_currentBet, origin);
+                }
+                else
+                {
+                    _betChip.Hide();
+                }
+            }
+            if (_betChipButton != null) _betChipButton.interactable = true;
+        }
+
+        private void RefreshBetControls()
+        {
+            bool broke = MaxBet < MinBet;
+
+            if (_dealButton != null) _dealButton.interactable = !broke && _currentBet >= MinBet;
+
+            if (_chipButtons != null && _chipValues != null)
+            {
+                for (int i = 0; i < _chipButtons.Length && i < _chipValues.Length; i++)
+                {
+                    if (_chipButtons[i] == null) continue;
+                    _chipButtons[i].interactable = !broke && _currentBet < MaxBet;
+                }
+            }
+        }
+
+        private bool RoundInProgress =>
+            _game != null && _game.Engine != null &&
+            _game.Engine.Phase != RoundPhase.Settled && _game.Engine.Phase != RoundPhase.Idle;
+
+        // =====================================================================
+        //  Daily reward shortcut
+        // =====================================================================
+
+        /// <summary>Same claim flow as the Main Menu's daily-reward button. Result is
+        /// shown in the outcome label — it's free between rounds and gets overwritten by
+        /// the next round's result either way.</summary>
+        private void ClaimGift()
+        {
+            if (!AppManager.Exists || _outcomeLabel == null) return;
+
+            DailyRewardResult result = AppManager.Instance.Rewards.TryClaim(DateTime.UtcNow);
+            _outcomeLabel.text = result.Success
+                ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
+                : $"Next reward in {result.TimeUntilNext.Hours}h {result.TimeUntilNext.Minutes}m";
+            if (_outcomePunch != null && result.Success)
+                _outcomePunch.Play(BlackjackColor, 0.6f);
+
+            RefreshGiftDot();
+            if (!_settling) RefreshBalance();
+            RefreshBetControls();
+        }
+
+        private void RefreshGiftDot()
+        {
+            if (_giftDot == null || !AppManager.Exists) return;
+            if (AppManager.Instance.Rewards.IsRewardAvailable(DateTime.UtcNow)) _giftDot.Show();
+            else _giftDot.Hide();
+        }
+
+        // =====================================================================
+        //  Rendering
+        // =====================================================================
+
+        private void RefreshBalance()
+        {
+            if (_game == null) return;
+            // The rollup owns the label's text when present, so don't write both.
+            if (_balanceRollup != null) _balanceRollup.SetValue(_game.Balance);
+            else if (_balanceLabel != null) _balanceLabel.text = $"{_game.Balance:N0}";
         }
 
         private void Refresh()
         {
-            // Just the number — it sits inside the coin pill, which carries the meaning.
-            // The rollup owns the label's text when present, so don't write both.
-            if (_balanceRollup != null) _balanceRollup.SetValue(_game.Balance);
-            else if (_balanceLabel != null) _balanceLabel.text = $"{_game.Balance:N0}";
+            // While the settle sequence runs it owns the dealer, the balance and the
+            // rows; stray Refresh calls (button handlers, round-complete event) must not
+            // fight it.
+            if (_settling) return;
+
+            RefreshBalance();
 
             var engine = _game.Engine;
             if (engine == null)
             {
                 SetActionsInteractable(false);
-                if (_dealButton != null) _dealButton.interactable = true;
                 if (_dealerHandView != null) _dealerHandView.Clear();
-                if (_playerHandView != null) _playerHandView.Clear();
+                ClearPlayerViews();
                 if (_dealerHandLabel != null) _dealerHandLabel.text = "Dealer";
-                if (_playerHandLabel != null) _playerHandLabel.text = "Place your bet";
-                if (_betChip != null) _betChip.Hide();
+                if (_playerHandLabel != null)
+                    _playerHandLabel.text = MaxBet < MinBet
+                        ? "Out of chips — tap + for more"
+                        : "Tap a chip to place your bet";
+                if (_betChip != null && _currentBet == 0) _betChip.Hide();
                 RefreshBetControls();
                 ShowRow(_betRow, true);
                 ShowRow(_actionRow, false);
                 return;
             }
 
-            RenderHands(engine);
+            // A settled round that hasn't reacted yet: freeze the pre-reveal picture and
+            // hand the table to the sequence. The player's last card still animates in;
+            // the dealer stays concealed until the sequence turns the hole card.
+            if (engine.Phase == RoundPhase.Settled && !_outcomeShown)
+            {
+                _settling = true;
+                SyncNewRound(engine);
+                RenderPlayer(engine);
+                RenderDealerConcealed(engine);
+                ShowRow(_betRow, false);
+                ShowRow(_actionRow, false);
+                StartCoroutine(SettleSequence(engine));
+                return;
+            }
+
+            SyncNewRound(engine);
+            RenderPlayer(engine);
+
+            bool playing = engine.Phase == RoundPhase.PlayerTurn;
+            if (playing) RenderDealerConcealed(engine);
+            else RenderDealer(engine, engine.DealerHand.Cards.Count);
 
             // Keep the chip's number honest: doubling and splitting both change how much
             // is actually at risk, so total it from the hands rather than the opening bet.
-            if (_betChip != null)
+            // Only while the round owns the chip — after settle the chip previews the
+            // NEXT stake, and last round's total must not overwrite it.
+            if (_betChip != null && engine.Phase == RoundPhase.PlayerTurn)
             {
                 long staked = 0;
                 foreach (Hand h in engine.PlayerHands) staked += h.Bet;
                 if (staked > 0) _betChip.SetAmount(staked);
             }
 
-            bool playing = engine.Phase == RoundPhase.PlayerTurn;
+            Hand active = engine.ActiveHand;
+            bool canAffordExtra = active != null && _game.Balance >= active.Bet;
             if (_hitButton != null) _hitButton.interactable = engine.CanHit;
             if (_standButton != null) _standButton.interactable = engine.CanStand;
-            if (_doubleButton != null) _doubleButton.interactable = engine.CanDouble;
-            if (_splitButton != null) _splitButton.interactable = engine.CanSplit;
-            if (_dealButton != null) _dealButton.interactable = !playing;
+            if (_doubleButton != null) _doubleButton.interactable = engine.CanDouble && canAffordExtra;
+            if (_splitButton != null) _splitButton.interactable = engine.CanSplit && canAffordExtra;
+            if (_dealButton != null) _dealButton.interactable = !playing && _currentBet >= MinBet;
 
-            // Betting and playing are mutually exclusive, so the two control rows share
-            // the same band on the rail — the mockup only ever shows one of them.
             if (!playing) RefreshBetControls();
             ShowRow(_betRow, !playing);
             ShowRow(_actionRow, playing);
+        }
 
-            if (engine.Phase == RoundPhase.Settled) ShowOutcome(engine);
+        /// <summary>Clears the card views when a fresh engine appears, so the new round
+        /// deals in rather than snapping.</summary>
+        private void SyncNewRound(BlackjackEngine engine)
+        {
+            if (ReferenceEquals(engine, _renderedEngine)) return;
+
+            if (_dealerHandView != null) _dealerHandView.Clear();
+            ClearPlayerViews();
+            _splitLayout = false;
+            _renderedEngine = engine;
+        }
+
+        private void ClearPlayerViews()
+        {
+            if (_playerHandView != null) _playerHandView.Clear();
+            if (_splitHandLeft != null) _splitHandLeft.Clear();
+            if (_splitHandRight != null) _splitHandRight.Clear();
+            SetBadge(_splitBadgeLeft, null, PushColor);
+            SetBadge(_splitBadgeRight, null, PushColor);
+        }
+
+        private void RenderDealerConcealed(BlackjackEngine engine)
+        {
+            IReadOnlyList<Card> cards = engine.DealerHand.Cards;
+            bool conceal = cards.Count > 1;
+            if (_dealerHandView != null) _dealerHandView.Render(cards, conceal ? 1 : -1);
+            if (_dealerHandLabel != null)
+            {
+                _dealerHandLabel.text = conceal
+                    ? $"Dealer  {VisibleValue(cards, 1)} + ?"
+                    : "Dealer";
+            }
+        }
+
+        /// <summary>Draws the first <paramref name="revealed"/> dealer cards face up.</summary>
+        private void RenderDealer(BlackjackEngine engine, int revealed)
+        {
+            IReadOnlyList<Card> cards = engine.DealerHand.Cards;
+            int count = Mathf.Clamp(revealed, 0, cards.Count);
+
+            var shown = new List<Card>(count);
+            for (int i = 0; i < count; i++) shown.Add(cards[i]);
+
+            if (_dealerHandView != null) _dealerHandView.Render(shown, -1);
+            if (_dealerHandLabel != null)
+            {
+                int value = HandEvaluator.Evaluate(shown).Value;
+                _dealerHandLabel.text = value > 21 ? "Dealer  BUST" : $"Dealer  {value}";
+            }
+        }
+
+        private void RenderPlayer(BlackjackEngine engine)
+        {
+            IReadOnlyList<Hand> hands = engine.PlayerHands;
+            if (hands.Count == 0) return;
+
+            if (hands.Count == 1)
+            {
+                Hand hand = hands[0];
+                if (_playerHandView != null) _playerHandView.Render(hand.Cards);
+                if (_splitHandLeft != null) _splitHandLeft.Clear();
+                if (_splitHandRight != null) _splitHandRight.Clear();
+                SetBadge(_splitBadgeLeft, null, PushColor);
+                SetBadge(_splitBadgeRight, null, PushColor);
+
+                if (_playerHandLabel != null)
+                {
+                    string total = hand.IsBust ? "BUST" : hand.Value.ToString();
+                    string soft = !hand.IsBust && hand.IsSoft ? " soft" : "";
+                    _playerHandLabel.text = $"You  {total}{soft}";
+                }
+                return;
+            }
+
+            // ---- split: one view per hand, the active one emphasised ----------------
+            bool firstSplitFrame = !_splitLayout;
+            if (firstSplitFrame)
+            {
+                // Cards re-deal into their new homes — the split visibly pulls the hand
+                // apart rather than teleporting it.
+                if (_playerHandView != null) _playerHandView.Clear();
+                _splitLayout = true;
+            }
+
+            int activeIndex = IndexOfHand(engine, engine.ActiveHand);
+            RenderSplitHand(_splitHandLeft, _splitBadgeLeft, hands[0], engine, 0, activeIndex, firstSplitFrame);
+            RenderSplitHand(_splitHandRight, _splitBadgeRight, hands[1], engine, 1, activeIndex, firstSplitFrame);
+
+            if (_playerHandLabel != null)
+            {
+                _playerHandLabel.text = engine.Phase == RoundPhase.PlayerTurn
+                    ? $"Playing hand {activeIndex + 1} of {hands.Count}"
+                    : "Split hands";
+            }
+        }
+
+        private void RenderSplitHand(HandView view, TMP_Text badge, Hand hand,
+            BlackjackEngine engine, int index, int activeIndex, bool instantEmphasis)
+        {
+            if (view != null)
+            {
+                view.Render(hand.Cards);
+                bool active = engine.Phase != RoundPhase.PlayerTurn || index == activeIndex;
+                view.SetEmphasis(active, instantEmphasis);
+            }
+
+            if (badge == null) return;
+
+            // Until results exist the badge carries the running total and stake; the
+            // settle sequence swaps in WIN/LOSE per hand.
+            HandResult? result = FindResult(hand);
+            if (result.HasValue && _outcomeShown)
+            {
+                ApplyResultBadge(badge, result.Value);
+            }
+            else
+            {
+                string total = hand.IsBust ? "BUST" : hand.Value.ToString();
+                SetBadge(badge, $"{total}  ·  {hand.Bet:N0}", hand.IsBust ? LoseColor : PushColor);
+            }
+        }
+
+        private HandResult? FindResult(Hand hand)
+        {
+            if (_lastResults == null) return null;
+            foreach (HandResult r in _lastResults)
+                if (ReferenceEquals(r.Hand, hand)) return r;
+            return null;
+        }
+
+        private void ApplyResultBadge(TMP_Text badge, HandResult result)
+        {
+            switch (result.Outcome)
+            {
+                case HandOutcome.PlayerBlackjack:
+                    SetBadge(badge, $"BLACKJACK +{result.NetChips:N0}", BlackjackColor); break;
+                case HandOutcome.PlayerWin:
+                    SetBadge(badge, $"WIN +{result.NetChips:N0}", WinColor); break;
+                case HandOutcome.Push:
+                    SetBadge(badge, "PUSH", PushColor); break;
+                case HandOutcome.PlayerBust:
+                    SetBadge(badge, "BUST", LoseColor); break;
+                case HandOutcome.Surrendered:
+                    SetBadge(badge, "SURRENDERED", PushColor); break;
+                default:
+                    SetBadge(badge, "LOSE", LoseColor); break;
+            }
+        }
+
+        private static void SetBadge(TMP_Text badge, string text, Color tint)
+        {
+            if (badge == null) return;
+            bool visible = !string.IsNullOrEmpty(text);
+            // The badge's pill frame is its parent; toggling that hides both together.
+            if (badge.transform.parent != null)
+                badge.transform.parent.gameObject.SetActive(visible);
+            if (!visible) return;
+            badge.text = text;
+            badge.color = tint;
+        }
+
+        private static int IndexOfHand(BlackjackEngine engine, Hand hand)
+        {
+            if (hand == null) return 0;
+            for (int i = 0; i < engine.PlayerHands.Count; i++)
+                if (ReferenceEquals(engine.PlayerHands[i], hand)) return i;
+            return 0;
+        }
+
+        /// <summary>Total of just the first <paramref name="count"/> cards.</summary>
+        private static int VisibleValue(IReadOnlyList<Card> cards, int count)
+        {
+            var visible = new List<Card>(count);
+            for (int i = 0; i < count && i < cards.Count; i++) visible.Add(cards[i]);
+            return HandEvaluator.Evaluate(visible).Value;
+        }
+
+        // =====================================================================
+        //  Settle sequence
+        // =====================================================================
+
+        /// <summary>
+        /// The round's third act, in order: the last player card lands, the hole card
+        /// turns, the dealer draws one card at a time, the verdict slams in, the chips
+        /// move, and only then does the bet row return with the stake re-placed.
+        /// </summary>
+        private IEnumerator SettleSequence(BlackjackEngine engine)
+        {
+            // Let the in-flight cards (a double's third card, the split re-deal) land.
+            yield return WaitForCardViews();
+
+            // Turn the hole card.
+            RenderDealer(engine, Mathf.Min(2, engine.DealerHand.Cards.Count));
+            yield return WaitForCardViews();
+            yield return new WaitForSeconds(_revealPause);
+
+            // Draw the rest, one by one.
+            for (int reveal = 3; reveal <= engine.DealerHand.Cards.Count; reveal++)
+            {
+                RenderDealer(engine, reveal);
+                yield return WaitForCardViews();
+                yield return new WaitForSeconds(_drawPause);
+            }
+
+            _outcomeShown = true;
+            ShowOutcome(engine);
+            RefreshBalance();
+
+            // Re-render split hands so the result badges replace the running totals.
+            if (engine.PlayerHands.Count > 1) RenderPlayer(engine);
+
+            yield return new WaitForSeconds(0.85f);
+
+            _settling = false;
+            PrefillRebet();
+            RefreshBetControls();
+            ShowRow(_betRow, true);
+            ShowRow(_actionRow, false);
+        }
+
+        private IEnumerator WaitForCardViews()
+        {
+            while ((_dealerHandView != null && _dealerHandView.IsAnimating) ||
+                   (_playerHandView != null && _playerHandView.IsAnimating) ||
+                   (_splitHandLeft != null && _splitHandLeft.IsAnimating) ||
+                   (_splitHandRight != null && _splitHandRight.IsAnimating))
+            {
+                yield return null;
+            }
+        }
+
+        private void ShowOutcome(BlackjackEngine engine)
+        {
+            if (_outcomeLabel == null) return;
+
+            string text;
+            Color tint;
+            float shake;
+
+            if (_lastResults != null && _lastResults.Count == 1)
+            {
+                HandResult r = _lastResults[0];
+                switch (r.Outcome)
+                {
+                    case HandOutcome.PlayerBlackjack:
+                        text = $"BLACKJACK!  +{r.NetChips:N0}"; tint = BlackjackColor; shake = 1.4f; break;
+                    case HandOutcome.PlayerWin:
+                        text = engine.DealerHand.IsBust
+                            ? $"DEALER BUSTS  +{r.NetChips:N0}"
+                            : $"YOU WIN  +{r.NetChips:N0}";
+                        tint = WinColor; shake = 0.7f; break;
+                    case HandOutcome.Push:
+                        text = "PUSH — BET RETURNED"; tint = PushColor; shake = 0f; break;
+                    case HandOutcome.PlayerBust:
+                        text = "BUST"; tint = LoseColor; shake = 1f; break;
+                    case HandOutcome.Surrendered:
+                        text = "SURRENDERED"; tint = PushColor; shake = 0f; break;
+                    default:
+                        text = "DEALER WINS"; tint = LoseColor; shake = 0.4f; break;
+                }
+            }
+            else if (_lastResults != null)
+            {
+                long net = 0;
+                bool anyBlackjack = false;
+                foreach (HandResult r in _lastResults)
+                {
+                    net += r.NetChips;
+                    if (r.Outcome == HandOutcome.PlayerBlackjack) anyBlackjack = true;
+                }
+
+                if (net > 0) { text = $"YOU WIN  +{net:N0}"; tint = anyBlackjack ? BlackjackColor : WinColor; shake = 0.8f; }
+                else if (net < 0) { text = "DEALER WINS"; tint = LoseColor; shake = 0.4f; }
+                else { text = "EVEN — PUSH"; tint = PushColor; shake = 0f; }
+            }
+            else
+            {
+                // Results event never arrived (shouldn't happen); stay silent over lying.
+                text = ""; tint = PushColor; shake = 0f;
+            }
+
+            _outcomeLabel.text = text;
+            if (!string.IsNullOrEmpty(text) && _outcomePunch != null)
+                _outcomePunch.Play(tint, Mathf.Max(0.35f, shake));
+            if (_shake != null && shake > 0f) _shake.Shake(shake);
+
+            // Any stake coming home sends the chip back to the pill; a clean loss sweeps
+            // it to the dealer.
+            if (_betChip != null && _lastResults != null)
+            {
+                bool anyReturned = false;
+                foreach (HandResult r in _lastResults)
+                {
+                    if (r.Outcome == HandOutcome.PlayerWin || r.Outcome == HandOutcome.PlayerBlackjack ||
+                        r.Outcome == HandOutcome.Push || r.Outcome == HandOutcome.Surrendered)
+                        anyReturned = true;
+                }
+                _betChip.Settle(anyReturned);
+            }
+        }
+
+        // =====================================================================
+        //  Plumbing
+        // =====================================================================
+
+        /// <summary>
+        /// Converts another rect's position into the bet chip's coordinate space, so
+        /// flights start exactly where the tapped control sits on this device.
+        /// </summary>
+        private Vector2 ToChipSpace(RectTransform source)
+        {
+            if (_betChip == null || source == null) return Vector2.zero;
+            var parent = _betChip.transform.parent as RectTransform;
+            if (parent == null) return Vector2.zero;
+
+            Vector2 screen = RectTransformUtility.WorldToScreenPoint(null, source.position);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, null, out Vector2 local);
+            return local;
         }
 
         /// <summary>
@@ -252,142 +756,6 @@ namespace BlackjackGame.UI.Screens
             group.interactable = visible;
             group.blocksRaycasts = visible;
             if (group.gameObject.activeSelf != visible) group.gameObject.SetActive(visible);
-        }
-
-        private void RenderHands(BlackjackEngine engine)
-        {
-            if (!ReferenceEquals(engine, _renderedEngine))
-            {
-                if (_dealerHandView != null) _dealerHandView.Clear();
-                if (_playerHandView != null) _playerHandView.Clear();
-                _renderedEngine = engine;
-            }
-
-            // While the player is still acting the hole card stays face down, and the
-            // dealer total shown is only what the player can actually see. Showing the
-            // real total here would leak the hidden card.
-            bool concealHole = engine.Phase == RoundPhase.PlayerTurn
-                               && engine.DealerHand.Cards.Count > 1;
-
-            if (_dealerHandView != null)
-                _dealerHandView.Render(engine.DealerHand.Cards, concealHole ? 1 : -1);
-
-            if (_dealerHandLabel != null)
-            {
-                _dealerHandLabel.text = concealHole
-                    ? $"Dealer  {VisibleValue(engine.DealerHand.Cards, 1)} + ?"
-                    : $"Dealer  {engine.DealerHand.Value}";
-            }
-
-            Hand active = engine.ActiveHand;
-            if (active == null && engine.PlayerHands.Count > 0) active = engine.PlayerHands[0];
-            if (active == null) return;
-
-            if (_playerHandView != null) _playerHandView.Render(active.Cards);
-
-            if (_playerHandLabel != null)
-            {
-                string prefix = engine.PlayerHands.Count > 1
-                    ? $"Hand {IndexOfHand(engine, active) + 1}/{engine.PlayerHands.Count}  -  "
-                    : "";
-                string total = active.IsBust ? "BUST" : active.Value.ToString();
-                string soft = !active.IsBust && active.IsSoft ? " soft" : "";
-                _playerHandLabel.text = $"{prefix}You  {total}{soft}  -  bet {active.Bet:N0}";
-            }
-        }
-
-        private static int IndexOfHand(BlackjackEngine engine, Hand hand)
-        {
-            for (int i = 0; i < engine.PlayerHands.Count; i++)
-                if (ReferenceEquals(engine.PlayerHands[i], hand)) return i;
-            return 0;
-        }
-
-        /// <summary>Total of just the first <paramref name="count"/> cards.</summary>
-        private static int VisibleValue(IReadOnlyList<Card> cards, int count)
-        {
-            var visible = new List<Card>(count);
-            for (int i = 0; i < count && i < cards.Count; i++) visible.Add(cards[i]);
-            return HandEvaluator.Evaluate(visible).Value;
-        }
-
-        private void ShowOutcome(BlackjackEngine engine)
-        {
-            if (_outcomeLabel == null) return;
-
-            // Only react once per round. Refresh runs on every UI event, and replaying the
-            // slam and shake on each of them would strobe the screen.
-            bool firstTime = !_outcomeShown;
-            _outcomeShown = true;
-
-            if (engine.PlayerHands.Count == 1)
-            {
-                Hand hand = engine.PlayerHands[0];
-
-                string text;
-                Color tint;
-                float shake;
-
-                if (hand.IsBust)
-                {
-                    text = "BUST"; tint = LoseColor; shake = 1f;
-                }
-                else if (engine.DealerHand.IsBust)
-                {
-                    text = "DEALER BUSTS — YOU WIN"; tint = WinColor; shake = 0.7f;
-                }
-                else if (hand.IsBlackjack && !engine.DealerHand.IsBlackjack)
-                {
-                    text = "BLACKJACK!"; tint = BlackjackColor; shake = 1.4f;
-                }
-                else if (hand.Value > engine.DealerHand.Value)
-                {
-                    text = "YOU WIN"; tint = WinColor; shake = 0.55f;
-                }
-                else if (hand.Value < engine.DealerHand.Value)
-                {
-                    text = "DEALER WINS"; tint = LoseColor; shake = 0.4f;
-                }
-                else
-                {
-                    text = "PUSH"; tint = PushColor; shake = 0f;
-                }
-
-                _outcomeLabel.text = text;
-                if (firstTime)
-                {
-                    PlayOutcomeReaction(tint, shake);
-                    // Stake comes back on anything that isn't an outright loss.
-                    bool keepsStake = !hand.IsBust && (engine.DealerHand.IsBust ||
-                                                       hand.Value >= engine.DealerHand.Value);
-                    if (_betChip != null) _betChip.Settle(keepsStake);
-                }
-                return;
-            }
-
-            var parts = new List<string>(engine.PlayerHands.Count);
-            for (int i = 0; i < engine.PlayerHands.Count; i++)
-            {
-                Hand hand = engine.PlayerHands[i];
-                parts.Add($"H{i + 1} {(hand.IsBust ? "bust" : hand.Value.ToString())}");
-            }
-            _outcomeLabel.text = string.Join("   ", parts);
-            if (firstTime)
-            {
-                PlayOutcomeReaction(PushColor, 0.5f);
-                // Split hands can land either way; treat any surviving hand as keeping
-                // the stake so the chip's exit matches the balance moving up.
-                bool anySurvived = false;
-                foreach (Hand h in engine.PlayerHands)
-                    if (!h.IsBust) anySurvived = true;
-                if (_betChip != null) _betChip.Settle(anySurvived);
-            }
-        }
-
-        private void PlayOutcomeReaction(Color tint, float shakeStrength)
-        {
-            if (_outcomePunch != null) _outcomePunch.Play(tint, Mathf.Max(0.35f, shakeStrength));
-            if (_shake != null && shakeStrength > 0f) _shake.Shake(shakeStrength);
         }
 
         private void SetActionsInteractable(bool value)
