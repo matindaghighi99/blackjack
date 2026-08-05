@@ -12,6 +12,21 @@ Output:
     Assets/Art/Cards/card_<Suit>_<01..13>.png   52 faces, Suit matching the C# enum
     (card_Back.png comes from extract_table_art.py, not this script)
     Assets/Art/Table/Felt.png                   table background
+
+Design notes
+------------
+The deck is styled to sit beside the gold-and-ivory concept render:
+
+* Indices use the same serif display face as the UI (TeX Gyre Bonum Bold), not a
+  UI sans — a card index in DejaVu reads as a debug asset next to the render.
+* Pips are drawn from parametric curves (a real cardioid heart, a bowed diamond)
+  and shaded with a vertical gradient, an inner sheen and a soft contact shadow,
+  so they have the slight dimensionality of printed ink rather than flat vector fill.
+* Courts are a single consistent treatment across all twelve cards: a diapered
+  tapestry panel in a double gold frame, a crown proper to the rank, and a large
+  inlaid monogram — mirrored top/bottom like a real court card. One style for the
+  whole deck beats three lush paintings sitting next to nine placeholders.
+* The ace of spades gets the traditional oversized ornament.
 """
 
 import math
@@ -35,13 +50,15 @@ SS = 4  # supersampling factor
 
 FELT_W, FELT_H = 1080, 1920
 
-FONT_BOLD = "/usr/local/lib/python3.10/dist-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf"
+# The game's own display serif, so card indices and UI titles share one voice.
+FONT_SERIF = os.path.join(ROOT, "Assets", "Fonts", "TeXGyreBonum-Bold.otf")
+FONT_FALLBACK = "/usr/local/lib/python3.10/dist-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf"
 
 # Suit order must match BlackjackGame.Blackjack.Cards.Suit
 SUITS = ["Clubs", "Diamonds", "Hearts", "Spades"]
 # Ink deepened to sit on warm stock; pure red/black looked garish against ivory.
-RED = (176, 32, 38)
-BLACK = (28, 28, 32)
+RED = (168, 28, 36)
+BLACK = (30, 30, 36)
 SUIT_COLOR = {"Clubs": BLACK, "Spades": BLACK, "Hearts": RED, "Diamonds": RED}
 
 RANK_LABEL = {1: "A", 11: "J", 12: "Q", 13: "K"}
@@ -53,82 +70,166 @@ FACE_TOP = (250, 241, 212)
 FACE_BOT = (238, 221, 178)
 FACE_EDGE = (191, 168, 122)
 GOLD_LINE = (176, 141, 74)
+GOLD_DEEP = (135, 103, 48)
+GOLD_HI = (232, 202, 132)
 
 BACK_BG = (24, 54, 96)
 BACK_ACCENT = (72, 116, 178)
 BACK_EDGE = (245, 245, 245)
 
 
+def load_font(size, serif=True):
+    path = FONT_SERIF if serif and os.path.exists(FONT_SERIF) else FONT_FALLBACK
+    return ImageFont.truetype(path, size)
+
+
+def _shade(color, k):
+    """Lightens (k>1) or darkens (k<1) an RGB colour."""
+    if k >= 1:
+        return tuple(min(255, int(c + (255 - c) * (k - 1))) for c in color)
+    return tuple(int(c * k) for c in color)
+
+
 # ---------------------------------------------------------------------------
-# Suit pip drawing (normalised: s is the pip's nominal half-size)
+# Parametric pip outlines (unit-ish coordinates, later scaled by s)
 # ---------------------------------------------------------------------------
 
-def _heart(d, cx, cy, s, color, flip=False):
-    f = -1 if flip else 1
-    r = s * 0.30
-    d.ellipse([cx - s * 0.25 - r, cy - f * s * 0.20 - r,
-               cx - s * 0.25 + r, cy - f * s * 0.20 + r], fill=color)
-    d.ellipse([cx + s * 0.25 - r, cy - f * s * 0.20 - r,
-               cx + s * 0.25 + r, cy - f * s * 0.20 + r], fill=color)
-    d.polygon([(cx - s * 0.54, cy - f * s * 0.14),
-               (cx + s * 0.54, cy - f * s * 0.14),
-               (cx, cy + f * s * 0.58)], fill=color)
+def _heart_points(n=120):
+    """Classic cardioid heart, normalised to roughly a unit box."""
+    pts = []
+    for i in range(n):
+        t = math.pi * 2 * i / n
+        x = 16 * math.sin(t) ** 3
+        y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+        pts.append((x / 17.0, -y / 17.0))
+    return pts
 
 
-def _stem(d, cx, cy, s, color):
-    d.polygon([(cx - s * 0.07, cy + s * 0.16),
-               (cx + s * 0.07, cy + s * 0.16),
-               (cx + s * 0.24, cy + s * 0.62),
-               (cx - s * 0.24, cy + s * 0.62)], fill=color)
+_HEART = _heart_points()
 
 
-def draw_pip(d, suit, cx, cy, s, color, inverted=False):
-    """Draws one suit pip centred at (cx, cy). `inverted` rotates it 180 degrees."""
-    if inverted:
-        cy_ = cy
-        if suit == "Hearts":
-            _heart(d, cx, cy_, s, color, flip=True)
-            return
-        if suit == "Diamonds":
-            draw_pip(d, "Diamonds", cx, cy_, s, color)
-            return
-        if suit == "Spades":
-            _heart(d, cx, cy_, s, color, flip=False)
-            _stem_inv(d, cx, cy_, s, color)
-            return
-        if suit == "Clubs":
-            _clubs(d, cx, cy_, s, color, flip=True)
-            return
+def _diamond_points(bow=0.085, n=28):
+    """A diamond whose sides bow gently outward — printed diamonds are convex."""
+    corners = [(0, -0.62), (0.46, 0), (0, 0.62), (-0.46, 0)]
+    pts = []
+    for i in range(4):
+        ax, ay = corners[i]
+        bx, by = corners[(i + 1) % 4]
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        # Push the midpoint outward along its normal.
+        nx, ny = mx, my
+        ln = math.hypot(nx, ny) or 1.0
+        cx_, cy_ = mx + nx / ln * bow, my + ny / ln * bow
+        for j in range(n):
+            t = j / n
+            # Quadratic bezier a -> control -> b
+            x = (1 - t) ** 2 * ax + 2 * (1 - t) * t * cx_ + t ** 2 * bx
+            y = (1 - t) ** 2 * ay + 2 * (1 - t) * t * cy_ + t ** 2 * by
+            pts.append((x, y))
+    return pts
 
+
+_DIAMOND = _diamond_points()
+
+
+def _spade_stem(s):
+    """Concave-flanked stem with a flared foot, as on printed spades/clubs."""
+    pts = []
+    steps = 16
+    for i in range(steps + 1):          # right flank, top to bottom (concave)
+        t = i / steps
+        x = 0.055 + 0.185 * t * t
+        y = 0.14 + 0.50 * t
+        pts.append((x, y))
+    for i in range(steps + 1):          # left flank, bottom to top
+        t = 1 - i / steps
+        x = -(0.055 + 0.185 * t * t)
+        y = 0.14 + 0.50 * t
+        pts.append((x, y))
+    return [(x * s, y * s) for x, y in pts]
+
+
+def _pip_polys(suit, s):
+    """Returns a list of polygons (point lists, centred on origin) making up a pip."""
+    polys = []
     if suit == "Hearts":
-        _heart(d, cx, cy, s, color, flip=False)
+        polys.append([(x * s * 0.62, y * s * 0.62 + s * 0.02) for x, y in _HEART])
     elif suit == "Diamonds":
-        d.polygon([(cx, cy - s * 0.62), (cx + s * 0.44, cy),
-                   (cx, cy + s * 0.62), (cx - s * 0.44, cy)], fill=color)
+        polys.append([(x * s, y * s) for x, y in _DIAMOND])
     elif suit == "Spades":
-        _heart(d, cx, cy, s, color, flip=True)  # point-up heart == spade body
-        _stem(d, cx, cy, s, color)
+        body = [(x * s * 0.60, -y * s * 0.60 - s * 0.06) for x, y in _HEART]
+        polys.append(body)
+        polys.append(_spade_stem(s))
     elif suit == "Clubs":
-        _clubs(d, cx, cy, s, color, flip=False)
+        r = s * 0.305
+        for dx, dy in ((0.0, -0.315), (-0.335, 0.115), (0.335, 0.115)):
+            cx_, cy_ = s * dx, s * dy
+            circ = [(cx_ + r * math.cos(a), cy_ + r * math.sin(a))
+                    for a in [math.tau * i / 40 for i in range(40)]]
+            polys.append(circ)
+        polys.append(_spade_stem(s))
+    return polys
 
 
-def _stem_inv(d, cx, cy, s, color):
-    d.polygon([(cx - s * 0.07, cy - s * 0.16),
-               (cx + s * 0.07, cy - s * 0.16),
-               (cx + s * 0.24, cy - s * 0.62),
-               (cx - s * 0.24, cy - s * 0.62)], fill=color)
+def pip_layer(suit, s, color, ss=1):
+    """
+    One shaded pip on its own transparent layer (sized to fit), centred.
+
+    The pip is built as a mask, then filled with a vertical gradient, kissed with an
+    inner sheen at the top and set on a soft contact shadow — ink with a little life
+    in it, matching the moulded gold of the UI kit.
+    """
+    pad = int(s * 0.9)
+    size = int(s * 2 + pad)
+    cx = cy = size / 2
+
+    mask = Image.new("L", (size, size), 0)
+    md = ImageDraw.Draw(mask)
+    for poly in _pip_polys(suit, s):
+        md.polygon([(cx + x, cy + y) for x, y in poly], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(0.5 * ss))
+
+    grad = Image.new("RGB", (1, size))
+    top, bot = _shade(color, 1.22), _shade(color, 0.72)
+    for y in range(size):
+        t = y / max(1, size - 1)
+        grad.putpixel((0, y), tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
+    grad = grad.resize((size, size), Image.BILINEAR)
+
+    layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+
+    # Contact shadow first, so the fill sits on top of it.
+    shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    shadow.paste(Image.new("RGBA", (size, size), (30, 18, 8, 92)), (0, 0), mask)
+    shadow = shadow.filter(ImageFilter.GaussianBlur(1.6 * ss))
+    layer.alpha_composite(shadow, (int(0.5 * ss), int(2.2 * ss)))
+
+    body = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    body.paste(grad.convert("RGBA"), (0, 0), mask)
+
+    # Inner sheen: a soft light pass across the pip's upper third.
+    sheen_mask = mask.copy().filter(ImageFilter.GaussianBlur(2.5 * ss))
+    sheen = Image.new("L", (size, size), 0)
+    sd = ImageDraw.Draw(sheen)
+    sd.ellipse([size * 0.14, -size * 0.25, size * 0.86, size * 0.42], fill=70)
+    sheen = ImageChops_multiply(sheen, sheen_mask)
+    body.alpha_composite(
+        Image.merge("RGBA", [Image.new("L", (size, size), 255)] * 3 + [sheen]))
+
+    layer.alpha_composite(body)
+    return layer
 
 
-def _clubs(d, cx, cy, s, color, flip=False):
-    f = -1 if flip else 1
-    r = s * 0.29
-    for dx, dy in ((0.0, -0.30), (-0.33, 0.12), (0.33, 0.12)):
-        ccx, ccy = cx + s * dx, cy + f * s * dy
-        d.ellipse([ccx - r, ccy - r, ccx + r, ccy + r], fill=color)
-    if flip:
-        _stem_inv(d, cx, cy, s, color)
-    else:
-        _stem(d, cx, cy, s, color)
+def ImageChops_multiply(a, b):
+    from PIL import ImageChops
+    return ImageChops.multiply(a, b)
+
+
+def draw_pip(img, suit, cx, cy, s, color, inverted=False):
+    layer = pip_layer(suit, s, color, ss=SS)
+    if inverted:
+        layer = layer.rotate(180)
+    img.alpha_composite(layer, (int(cx - layer.width / 2), int(cy - layer.height / 2)))
 
 
 # ---------------------------------------------------------------------------
@@ -152,10 +253,6 @@ LAYOUTS = {
     10: [(L, TOP), (R, TOP), (C, 0.28), (L, UPR), (R, UPR),
          (L, LWR), (R, LWR), (C, 0.72), (L, BOT), (R, BOT)],
 }
-
-
-def load_font(size):
-    return ImageFont.truetype(FONT_BOLD, size)
 
 
 def draw_rounded(d, box, radius, fill, outline=None, width=1):
@@ -200,47 +297,220 @@ def card_plate(w, h):
     return plate
 
 
+def serif_text_layer(label, px, color, tracking=0):
+    """A text layer with a hint of letterpress: dark below-right, light above-left."""
+    fnt = load_font(px)
+    probe = ImageDraw.Draw(Image.new("RGBA", (8, 8)))
+    bbox = probe.textbbox((0, 0), label, font=fnt)
+    w = bbox[2] - bbox[0] + tracking * max(0, len(label) - 1) + 8
+    h = bbox[3] - bbox[1] + 8
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+
+    def put(dx, dy, fill):
+        x = 4 - bbox[0] + dx
+        for i, ch in enumerate(label):
+            d.text((x, 4 - bbox[1] + dy), ch, font=fnt, fill=fill)
+            x += d.textbbox((0, 0), ch, font=fnt)[2] + tracking
+
+    put(1.2, 1.6, _shade(color, 0.55) + (170,))
+    put(-0.8, -1.2, _shade(color, 1.55) + (150,))
+    put(0, 0, color)
+    return layer
+
+
+def corner_index(suit, rank, color):
+    """The rank-and-pip corner block, on its own layer."""
+    label = RANK_LABEL.get(rank, str(rank))
+    px = int((46 if label == "10" else 56) * SS)
+    text = serif_text_layer(label, px, color, tracking=int(-3 * SS) if label == "10" else 0)
+
+    pip = pip_layer(suit, 21 * SS, color, ss=SS)
+    w = max(text.width, pip.width) + 4 * SS
+    layer = Image.new("RGBA", (w, text.height + pip.height - int(6 * SS)), (0, 0, 0, 0))
+    layer.alpha_composite(text, ((w - text.width) // 2, 0))
+    layer.alpha_composite(pip, ((w - pip.width) // 2, text.height - int(6 * SS)))
+    return layer
+
+
+# ---------------------------------------------------------------------------
+# Court cards
+# ---------------------------------------------------------------------------
+
+def _crown_layer(rank, wpx, color):
+    """
+    A small crown proper to the rank: five-point with jewels for the king, a pearled
+    coronet for the queen, a simple three-point circlet for the jack.
+    """
+    w = wpx
+    h = int(wpx * 0.62)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    base_y = int(h * 0.78)
+    band = int(h * 0.16)
+
+    def jewel(cx, cy, r):
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color,
+                  outline=GOLD_DEEP, width=max(1, SS))
+
+    if rank == 13:      # King — five points, cross-topped centre
+        pts = 5
+        for i in range(pts):
+            x0 = w * i / pts
+            x1 = w * (i + 1) / pts
+            xm = (x0 + x1) / 2
+            d.polygon([(x0, base_y), (xm, h * 0.10 if i == pts // 2 else h * 0.22),
+                       (x1, base_y)], fill=GOLD_LINE, outline=GOLD_DEEP, width=max(1, SS))
+            jewel(xm, h * (0.16 if i == pts // 2 else 0.27), h * 0.055)
+    elif rank == 12:    # Queen — arcs with pearls
+        pts = 4
+        for i in range(pts):
+            x0 = w * i / pts
+            x1 = w * (i + 1) / pts
+            d.pieslice([x0, h * 0.18, x1, base_y + h * 0.35], 180, 360,
+                       fill=GOLD_LINE, outline=GOLD_DEEP, width=max(1, SS))
+        for i in range(pts + 1):
+            jewel(w * i / pts if 0 < i < pts else (h * 0.06 if i == 0 else w - h * 0.06),
+                  h * 0.20, h * 0.06)
+    else:               # Jack — plain three-point circlet
+        pts = 3
+        for i in range(pts):
+            x0 = w * i / pts
+            x1 = w * (i + 1) / pts
+            xm = (x0 + x1) / 2
+            d.polygon([(x0, base_y), (xm, h * 0.26), (x1, base_y)],
+                      fill=GOLD_LINE, outline=GOLD_DEEP, width=max(1, SS))
+
+    d.rectangle([0, base_y, w, base_y + band], fill=GOLD_LINE,
+                outline=GOLD_DEEP, width=max(1, SS))
+    hi = ImageDraw.Draw(layer)
+    hi.rectangle([0, base_y + max(1, SS), w, base_y + max(2, 2 * SS)], fill=GOLD_HI)
+    return layer
+
+
+def _diaper_pattern(w, h):
+    """A faint lozenge tapestry pattern for the court panel background."""
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    step = int(26 * SS)
+    for yy in range(0, h + step, step):
+        for xx in range(0, w + step, step):
+            off = (step // 2) if (yy // step) % 2 else 0
+            cx, cy = xx + off, yy
+            r = step * 0.30
+            d.polygon([(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)],
+                      outline=(176, 141, 74, 44), width=max(1, SS))
+    return layer
+
+
+def make_court(img, suit, rank, w, h, color):
+    d = ImageDraw.Draw(img)
+    pad_x, pad_y = int(w * 0.165), int(h * 0.150)
+    panel_box = [pad_x, pad_y, w - pad_x, h - pad_y]
+    pw, ph = panel_box[2] - panel_box[0], panel_box[3] - panel_box[1]
+
+    # Panel ground: a slightly deeper ivory so the monogram panel reads as inset.
+    ground = Image.new("RGBA", (pw, ph), (233, 217, 176, 255))
+    ground.alpha_composite(_diaper_pattern(pw, ph))
+    pmask = Image.new("L", (pw, ph), 0)
+    ImageDraw.Draw(pmask).rounded_rectangle([0, 0, pw - 1, ph - 1],
+                                            radius=18 * SS, fill=255)
+    img.paste(ground, (panel_box[0], panel_box[1]), pmask)
+
+    # Double frame: moulded gold outside, suit hairline inside.
+    draw_rounded(d, panel_box, 18 * SS, fill=None, outline=GOLD_DEEP, width=max(1, 4 * SS))
+    draw_rounded(d, [panel_box[0] + 2 * SS, panel_box[1] + 2 * SS,
+                     panel_box[2] - 2 * SS, panel_box[3] - 2 * SS],
+                 16 * SS, fill=None, outline=GOLD_LINE, width=max(1, 2 * SS))
+    draw_rounded(d, [panel_box[0] + 7 * SS, panel_box[1] + 7 * SS,
+                     panel_box[2] - 7 * SS, panel_box[3] - 7 * SS],
+                 13 * SS, fill=None, outline=_shade(color, 1.05), width=max(1, SS))
+
+    # ---- upper half group: crown + inlaid monogram + flanking pips -------------
+    label = RANK_LABEL[rank]
+    half = Image.new("RGBA", (pw, ph // 2), (0, 0, 0, 0))
+
+    crown = _crown_layer(rank, int(pw * 0.34), color)
+    half.alpha_composite(crown, ((pw - crown.width) // 2, int(ph * 0.045)))
+
+    letter_px = int(96 * SS)
+    inlay = serif_text_layer(label, letter_px, GOLD_LINE)
+    face = serif_text_layer(label, letter_px, color)
+    lx = (pw - face.width) // 2
+    ly = int(ph * 0.045) + crown.height + int(2 * SS)
+    for ox, oy in ((-2 * SS, -2 * SS), (2 * SS, 2 * SS),
+                   (-2 * SS, 2 * SS), (2 * SS, -2 * SS)):
+        half.alpha_composite(inlay, (lx + int(ox), ly + int(oy)))
+    half.alpha_composite(face, (lx, ly))
+
+    side_pip = pip_layer(suit, 15 * SS, color, ss=SS)
+    py = ly + face.height // 2 - side_pip.height // 2
+    half.alpha_composite(side_pip, (int(pw * 0.115) - side_pip.width // 2, py))
+    half.alpha_composite(side_pip, (int(pw * 0.885) - side_pip.width // 2, py))
+
+    img.alpha_composite(half, (panel_box[0], panel_box[1]))
+    img.alpha_composite(half.rotate(180), (panel_box[0], panel_box[1] + ph - ph // 2))
+
+    # Centre divider with a pip medallion over it.
+    mid_y = panel_box[1] + ph // 2
+    d.line([panel_box[0] + 10 * SS, mid_y, panel_box[2] - 10 * SS, mid_y],
+           fill=GOLD_LINE, width=max(1, 2 * SS))
+    med_r = int(21 * SS)
+    d.ellipse([w / 2 - med_r, mid_y - med_r, w / 2 + med_r, mid_y + med_r],
+              fill=(238, 224, 186, 255), outline=GOLD_LINE, width=max(1, 2 * SS))
+    draw_pip(img, suit, w / 2, mid_y + 1 * SS, 13 * SS, color)
+
+
+def make_ace(img, suit, w, h, color):
+    d = ImageDraw.Draw(img)
+    cx, cy = w / 2, h / 2
+
+    # Gold double ring behind the pip — grandest on the spade, per tradition.
+    grand = suit == "Spades"
+    r_out = (118 if grand else 104) * SS
+    d.ellipse([cx - r_out, cy - r_out, cx + r_out, cy + r_out],
+              outline=GOLD_LINE, width=max(1, 3 * SS))
+    d.ellipse([cx - r_out + 6 * SS, cy - r_out + 6 * SS,
+               cx + r_out - 6 * SS, cy + r_out - 6 * SS],
+              outline=_shade(GOLD_LINE, 1.18), width=max(1, SS))
+
+    # Four small corner flourishes on the ring's diagonals.
+    for ang in (45, 135, 225, 315):
+        a = math.radians(ang)
+        fx, fy = cx + math.cos(a) * (r_out + 12 * SS), cy + math.sin(a) * (r_out + 12 * SS)
+        fr = 5 * SS
+        d.ellipse([fx - fr, fy - fr, fx + fr, fy + fr], fill=GOLD_LINE)
+        draw_tiny = 2 * SS
+        d.ellipse([fx - draw_tiny, fy - draw_tiny, fx + draw_tiny, fy + draw_tiny],
+                  fill=_shade(GOLD_LINE, 1.3))
+
+    draw_pip(img, suit, cx, cy, (96 if grand else 88) * SS, color)
+
+    if grand:
+        banner = serif_text_layer("ACE", int(17 * SS), GOLD_DEEP, tracking=int(6 * SS))
+        img.alpha_composite(banner, (int(cx - banner.width / 2),
+                                     int(cy + r_out + 16 * SS)))
+
+
 def make_card(suit, rank):
     w, h = CARD_W * SS, CARD_H * SS
     img = card_plate(w, h)
-    d = ImageDraw.Draw(img)
     color = SUIT_COLOR[suit]
 
-    label = RANK_LABEL.get(rank, str(rank))
-
     # --- corner indices -----------------------------------------------------
-    idx_font = load_font(int(58 * SS))
-    corner = Image.new("RGBA", (int(80 * SS), int(132 * SS)), (0, 0, 0, 0))
-    cd = ImageDraw.Draw(corner)
-    bbox = cd.textbbox((0, 0), label, font=idx_font)
-    cd.text(((corner.width - (bbox[2] - bbox[0])) / 2 - bbox[0], -bbox[1]),
-            label, font=idx_font, fill=color)
-    draw_pip(cd, suit, corner.width / 2, 104 * SS, 22 * SS, color)
-
-    img.alpha_composite(corner, (int(16 * SS), int(16 * SS)))
+    corner = corner_index(suit, rank, color)
+    img.alpha_composite(corner, (int(17 * SS), int(15 * SS)))
     img.alpha_composite(corner.rotate(180, expand=True),
-                        (w - corner.width - int(16 * SS), h - corner.height - int(16 * SS)))
+                        (w - corner.width - int(17 * SS), h - corner.height - int(15 * SS)))
 
     # --- centre --------------------------------------------------------------
     if rank in LAYOUTS:
         for fx, fy in LAYOUTS[rank]:
-            draw_pip(d, suit, fx * w, fy * h, 34 * SS, color, inverted=fy > 0.52)
+            draw_pip(img, suit, fx * w, fy * h, 33 * SS, color, inverted=fy > 0.52)
     elif rank == 1:
-        draw_pip(d, suit, w / 2, h / 2, 92 * SS, color)
+        make_ace(img, suit, w, h, color)
     else:
-        # Court cards: a clean monogram panel rather than fake royal artwork.
-        pad_x, pad_y = int(w * 0.19), int(h * 0.165)
-        # Double gold rule around the monogram, echoing the render's court borders.
-        draw_rounded(d, [pad_x, pad_y, w - pad_x, h - pad_y], 20 * SS,
-                     fill=None, outline=GOLD_LINE, width=max(1, 3 * SS))
-        draw_rounded(d, [pad_x + 6 * SS, pad_y + 6 * SS,
-                         w - pad_x - 6 * SS, h - pad_y - 6 * SS], 15 * SS,
-                     fill=None, outline=color, width=max(1, 2 * SS))
-        court_font = load_font(int(150 * SS))
-        bb = d.textbbox((0, 0), label, font=court_font)
-        d.text((w / 2 - (bb[2] - bb[0]) / 2 - bb[0], h * 0.5 - (bb[3] - bb[1]) / 2 - bb[1] - 22 * SS),
-               label, font=court_font, fill=color)
-        draw_pip(d, suit, w / 2, h * 0.685, 40 * SS, color)
+        make_court(img, suit, rank, w, h, color)
 
     return img.resize((CARD_W, CARD_H), Image.LANCZOS)
 
@@ -312,8 +582,8 @@ def make_felt():
 
     # Rule text sits low, clear of the UI panels that overlay the middle of the screen.
     # Values match ClassicRules: 3:2 naturals, dealer hits soft 17.
-    f1 = load_font(46)
-    f2 = load_font(28)
+    f1 = load_font(46, serif=False)
+    f2 = load_font(28, serif=False)
     for text, font, y, col in (("BLACKJACK PAYS 3 TO 2", f1, h * 0.905, gold),
                                ("Dealer must hit soft 17", f2, h * 0.945, (150, 176, 162))):
         bb = d.textbbox((0, 0), text, font=font)
@@ -344,7 +614,7 @@ def main():
     # make_back() is kept as the fallback design if that render ever goes away.
     make_felt().save(os.path.join(TABLE_DIR, "Felt.png"))
 
-    print(f"Wrote {count} card faces + back to {CARDS_DIR}")
+    print(f"Wrote {count} card faces to {CARDS_DIR}")
     print(f"Wrote table felt to {TABLE_DIR}")
 
 

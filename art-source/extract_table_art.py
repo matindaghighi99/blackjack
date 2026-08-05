@@ -45,7 +45,8 @@ GAME_W, GAME_H = 1080, 1920
 DYNAMIC = [
     (326, 186, 710, 424),    # dealer's two cards (+ drop shadows)
     (272, 636, 686, 1020),   # player's two cards (+ drop shadows)
-    (642, 796, 858, 972),    # bet chip stack
+    (636, 790, 880, 990),    # bet chip stack (+ its shadow tail)
+    (696, 946, 730, 994),    # card-shadow tail past the player box's lower-right
     # Top bar. The render bakes in a "5,000" balance and three icon buttons; those have
     # to be live, so they're painted out and rebuilt from sprites.
     (20, 20, 440, 120),
@@ -84,18 +85,19 @@ def _boundary_mean(region, hole_box, band=14):
     return tuple(v // max(1, n) for v in tot)
 
 
-def inpaint_diffuse(img, boxes, iterations=60, radius=20, pad=44):
+def inpaint_diffuse(img, boxes, pad=44, iterations=None, radius=None):
     """
-    Boundary-pinned diffusion inpaint.
+    Boundary-pinned diffusion inpaint, solved coarse-to-fine.
 
-    The hole is first flooded with the mean colour of the ring around it, then blurred
-    repeatedly while the pixels *outside* it are re-imposed from the original on every
-    pass, so colour flows inwards and converges on a smooth solution matching the
-    boundary exactly.
+    A single-scale blur loop was tried first; on holes 400px wide, 60 passes leave the
+    interior sitting at the seed's ring-mean brightness — visibly lighter than the
+    vignetted felt around it. Solving on an 1/8-scale grid first lets colour cross the
+    hole in a few dozen cheap passes (converging on the true harmonic fill), and the
+    full-resolution passes then only have to smooth the upsampled answer against the
+    pinned boundary.
 
-    The seed matters: diffusing from the untouched region just smears the card's own
-    bright pixels, and with a hole this wide the interior never washes out. Flooding
-    first removes that content so diffusion only has to shape the gradient.
+    iterations/radius are accepted for old call sites and ignored: the coarse-to-fine
+    schedule converges regardless of hole size, so tuning knobs are no longer needed.
     """
     for (x0, y0, x1, y1) in boxes:
         rx0, ry0 = max(0, x0 - pad), max(0, y0 - pad)
@@ -107,7 +109,6 @@ def inpaint_diffuse(img, boxes, iterations=60, radius=20, pad=44):
         hole = Image.new("L", region.size, 0)
         ImageDraw.Draw(hole).rectangle(
             [local[0], local[1], local[2] - 1, local[3] - 1], fill=255)
-        hole = hole.filter(ImageFilter.GaussianBlur(3))
 
         seed = region.copy()
         ImageDraw.Draw(seed).rectangle(
@@ -115,12 +116,72 @@ def inpaint_diffuse(img, boxes, iterations=60, radius=20, pad=44):
             fill=_boundary_mean(region, local))
 
         current = seed
-        for _ in range(iterations):
-            current = Image.composite(
-                current.filter(ImageFilter.GaussianBlur(radius)), region, hole)
+        # (scale divisor, blur radius, passes) — coarse layers carry colour across the
+        # hole; the final layer polishes the seam at native resolution.
+        for div, radius, passes in ((8, 6, 120), (4, 6, 40), (2, 6, 20), (1, 4, 12)):
+            size = (max(1, region.width // div), max(1, region.height // div))
+            small = current.resize(size, Image.LANCZOS)
+            small_ref = region.resize(size, Image.LANCZOS)
+            small_hole = hole.resize(size, Image.LANCZOS).filter(ImageFilter.GaussianBlur(1))
+            for _ in range(passes):
+                small = Image.composite(
+                    small.filter(ImageFilter.GaussianBlur(radius)), small_ref, small_hole)
+            current = small.resize(region.size, Image.LANCZOS)
+
+        # Re-impose the untouched surroundings exactly; only the hole keeps the fill.
+        soft = hole.filter(ImageFilter.GaussianBlur(3))
+        current = Image.composite(current, region, soft)
 
         img.paste(current, (rx0, ry0))
     return img
+
+
+# The felt is not plain baize: it carries a faint damask weave. Diffusion produces a
+# smooth fill with the right colour but no weave, and no amount of gaussian grain can
+# fake a pattern — so the patches read as bald spots. This lifts the high-frequency
+# detail (weave minus its own blur) from a clean stretch of felt and mirror-tiles it
+# over each hole. The diffusion fill keeps supplying the low-frequency shading; the
+# donor supplies the cloth.
+FELT_DONOR = (60, 660, 262, 800)   # clean felt left of the player's cards
+
+def transfer_felt_detail(img, boxes, donor_box=FELT_DONOR, strength=1.0, feather=16):
+    arr = np.array(img).astype(float)
+
+    dx0, dy0, dx1, dy1 = donor_box
+    donor = arr[dy0:dy1, dx0:dx1]
+    blur = np.array(
+        Image.fromarray(np.clip(donor, 0, 255).astype(np.uint8)).filter(
+            ImageFilter.GaussianBlur(5))).astype(float)
+    detail = donor - blur
+
+    # Mirror-tile so the pattern continues without hard repeats at tile seams.
+    def tiled(h, w):
+        tile = detail
+        flip_h = tile[:, ::-1]
+        row = np.concatenate([tile, flip_h], axis=1)
+        flip_v = row[::-1, :]
+        block = np.concatenate([row, flip_v], axis=0)
+        reps_y = h // block.shape[0] + 1
+        reps_x = w // block.shape[1] + 1
+        return np.tile(block, (reps_y, reps_x, 1))[:h, :w]
+
+    for (x0, y0, x1, y1) in boxes:
+        h, w = y1 - y0, x1 - x0
+        patch = tiled(h, w) * strength
+
+        # Feather so the transferred weave fades in at the box edge instead of
+        # switching on against the real weave outside it.
+        weight = np.ones((h, w, 1))
+        f = max(1, feather)
+        ramp = np.linspace(0, 1, f)
+        weight[:f, :, 0] *= ramp[:, None]
+        weight[-f:, :, 0] *= ramp[::-1][:, None]
+        weight[:, :f, 0] *= ramp[None, :]
+        weight[:, -f:, 0] *= np.minimum(weight[:, -f:, 0], ramp[::-1][None, :])
+
+        arr[y0:y1, x0:x1] += patch * weight
+
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
 
 
 def add_grain(img, boxes, sigma=2.6, pad=12):
@@ -146,24 +207,33 @@ def inpaint_rail_strip(img):
     """
     Rebuilds the leather rail across the action-button strip.
 
-    The rail is close to horizontally uniform apart from a vignette toward each edge, so
-    for every row the clean strips either side of the buttons are sampled and a quadratic
-    is fitted across x. That reproduces the vignette without creases — piecewise-linear
-    interpolation leaves a visible crease at every sample point — and, because each row is
-    solved independently, the rail's vertical shading survives intact.
-
-    Only the horizontal span the buttons occupy is replaced, feathered at both ends, so
-    the gold arc above the strip and the medallion below are untouched.
+    A quadratic fitted through the between-button gaps was tried first; the gaps catch
+    the buttons' glow, so the fit converged on a bright tan smear where dark leather
+    should be. This version takes the rail's true horizontal character — per-column
+    medians over clean full-width rows just BELOW the band — and rescales that profile
+    row by row to match each row's own outer margins. Vertical shading (rim light at
+    the top of the band fading to dark) comes from the margins; horizontal sheen comes
+    from the reference profile; neither is invented.
     """
     arr = np.array(img).astype(float)
     y0, y1 = RAIL_BAND
-    fx0, fx1 = RAIL_FILL
     width = arr.shape[1]
 
-    xs = np.arange(width)
-    centres = np.array([(s + e) / 2 for s, e in RAIL_CLEAN])
+    fx0, fx1 = 18, width - 18          # replace almost the whole width…
+    m_left = (2, 16)                    # …and read margins from the last honest pixels
+    m_right = (width - 16, width - 2)
 
-    # Blend weight: 1 across the fill span, ramping to 0 over the feather at each end.
+    # Clean, full-width leather directly below the band (above the suit-symbol row).
+    # The raw medians carry stitching noise and the medallion's warm glow at centre;
+    # a low-order fit keeps only the broad sheen, which is all the band should have.
+    ref_raw = np.median(arr[y1 + 8:y1 + 40], axis=0)      # (width, 3)
+    xs = np.arange(width)
+    ref = np.stack(
+        [np.polyval(np.polyfit(xs, ref_raw[:, c], 4), xs) for c in range(3)], axis=1)
+    ref_edge = np.median(np.concatenate(
+        [ref[m_left[0]:m_left[1]], ref[m_right[0]:m_right[1]]]), axis=0)
+    ref_edge = np.maximum(ref_edge, 1.0)
+
     weight = np.zeros(width)
     weight[fx0:fx1] = 1.0
     for i in range(RAIL_FEATHER):
@@ -172,13 +242,22 @@ def inpaint_rail_strip(img):
         weight[fx1 - 1 - i] = t
     weight = weight[:, None]
 
-    for y in range(y0, y1):
+    # Per-row gains first, then smoothed down the band: raw margins jitter row to
+    # row, and unsmoothed gains print that jitter as horizontal banding.
+    gains = np.zeros((y1 - y0, 3))
+    for i, y in enumerate(range(y0, y1)):
         row = arr[y]
-        samples = np.array([np.median(row[s:e], axis=0) for s, e in RAIL_CLEAN])
-        fit = np.stack(
-            [np.polyval(np.polyfit(centres, samples[:, c], 2), xs) for c in range(3)],
-            axis=1)
-        arr[y] = row * (1 - weight) + fit * weight
+        edge = np.median(np.concatenate(
+            [row[m_left[0]:m_left[1]], row[m_right[0]:m_right[1]]]), axis=0)
+        gains[i] = edge / ref_edge
+    k = np.exp(-0.5 * (np.arange(-9, 10) / 4.0) ** 2)
+    k /= k.sum()
+    for c in range(3):
+        gains[:, c] = np.convolve(np.pad(gains[:, c], 9, mode="edge"), k, "valid")
+
+    for i, y in enumerate(range(y0, y1)):
+        fill = ref * gains[i][None, :]
+        arr[y] = arr[y] * (1 - weight) + fill * weight
 
     out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
 
@@ -186,7 +265,7 @@ def inpaint_rail_strip(img):
     patch = out.crop((0, y0 - 8, width, y1 + 8)).filter(ImageFilter.GaussianBlur(1.0))
     out.paste(patch, (0, y0 - 8))
 
-    # Matched grain, or the smooth fit reads as plastic against the leather around it.
+    # Matched grain, or the smooth fill reads as plastic against the leather around it.
     arr = np.array(out).astype(float)
     rng = np.random.default_rng(23)
     arr[y0 - 8:y1 + 8] = np.clip(
@@ -196,7 +275,10 @@ def inpaint_rail_strip(img):
 
 def build_background(src):
     plate = inpaint_diffuse(src.copy(), DYNAMIC)
-    plate = add_grain(plate, DYNAMIC)
+    # First four boxes sit on felt and get the weave back; the top-bar boxes sit on
+    # dark wood, where plain grain is the right texture.
+    plate = transfer_felt_detail(plate, DYNAMIC[:4])
+    plate = add_grain(plate, DYNAMIC[4:])
     plate = inpaint_rail_strip(plate)
 
     # Scale to the game's width, then extend vertically: the render is 2:3 but the game
@@ -211,7 +293,11 @@ def build_background(src):
     out.paste(scaled.crop((0, 0, GAME_W, 4)).resize((GAME_W, pad_top), Image.BILINEAR), (0, 0))
     if pad_bottom > 0:
         bottom = scaled.crop((0, scaled.height - 4, GAME_W, scaled.height))
-        out.paste(bottom.resize((GAME_W, pad_bottom), Image.BILINEAR), (0, pad_top + scaled.height))
+        pad = bottom.resize((GAME_W, pad_bottom), Image.BILINEAR)
+        # Stretched rows print the medallion's glow as hard vertical streaks; a wide
+        # horizontal blur turns the same light into a smooth pool.
+        pad = pad.filter(ImageFilter.GaussianBlur(24))
+        out.paste(pad, (0, pad_top + scaled.height))
 
     # Darken the synthetic strips slightly so they read as vignette, not as a seam.
     d = ImageDraw.Draw(out, "RGBA")
@@ -219,7 +305,9 @@ def build_background(src):
         a = int(150 * (1 - i / pad_top))
         d.line([(0, i), (GAME_W, i)], fill=(0, 0, 0, a))
     for i in range(max(0, pad_bottom)):
-        a = int(170 * (i / max(1, pad_bottom)))
+        # Reach full black three-quarters of the way down: the replicated rows carry
+        # the medallion's glow as vertical streaks, and a hard fade is the honest fix.
+        a = int(255 * min(1.0, i / max(1.0, pad_bottom * 0.75)))
         y = pad_top + scaled.height + i
         d.line([(0, y), (GAME_W, y)], fill=(0, 0, 0, a))
 
@@ -316,10 +404,13 @@ def key_out_border(img, tolerance=64, feather=1.2):
     h, w, _ = arr.shape
     rgb = arr[:, :, :3]
 
-    # Average all four corners: the surround is felt, which is lit unevenly across a crop.
-    corners = [rgb[0:5, 0:5], rgb[0:5, w - 5:w], rgb[h - 5:h, 0:5], rgb[h - 5:h, w - 5:w]]
-    bg = np.concatenate([c.reshape(-1, 3) for c in corners]).mean(0)
-    similar = np.abs(rgb - bg).sum(2) < tolerance
+    # The surround is felt. Its brightness swings hugely with the vignette (a fixed
+    # colour-distance tolerance either misses the bright side or eats the chip), but its
+    # hue does not: felt is green-dominant everywhere, and nothing on the chip's own
+    # silhouette is — the rim is gold (red-dominant) and the face inlay, though green,
+    # is enclosed and therefore unreachable by the flood.
+    del tolerance  # kept in the signature for callers; hue keying replaces it
+    similar = (rgb[:, :, 1] > rgb[:, :, 0] + 8) & (rgb[:, :, 1] > rgb[:, :, 2] + 8)
 
     visited = np.zeros((h, w), bool)
     queue = deque()
