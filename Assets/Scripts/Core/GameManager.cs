@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BlackjackGame.Blackjack;
 using BlackjackGame.Economy;
 using BlackjackGame.Player;
+using BlackjackGame.UI.Components;
 using BlackjackGame.Utils;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -126,7 +127,10 @@ namespace BlackjackGame.Core
 
         private void HandleBalanceChanged(long balance) => OnBalanceChanged?.Invoke(balance);
 
-        public void GoToScene(string sceneName) => SceneManager.LoadScene(sceneName);
+        /// <summary>Scene changes go through the fader so screens hand over with a
+        /// dip to black instead of a hard cut. Falls back to a direct load when no
+        /// fader exists (tests, batch mode).</summary>
+        public void GoToScene(string sceneName) => SceneFader.TransitionTo(sceneName);
 
         protected override void OnDestroy()
         {
