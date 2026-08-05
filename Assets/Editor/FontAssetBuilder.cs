@@ -74,9 +74,9 @@ namespace BlackjackGame.EditorTools
             TMP_FontAsset body = BuildFontAsset(BodyFontPath, BodyAssetPath, 90, 1024);
 
             BuildMaterial(display, GoldMaterialPath, GoldFace, GoldOutline,
-                outlineWidth: 0.16f, bevel: true, glow: true);
+                outlineWidth: 0.09f, bevel: true, glow: true);
             BuildMaterial(bodyBold, GoldSmallMaterialPath, GoldFace, GoldOutline,
-                outlineWidth: 0.10f, bevel: false, glow: false);
+                outlineWidth: 0.07f, bevel: false, glow: false);
             BuildMaterial(body, InkMaterialPath, InkFace, new Color(0f, 0f, 0f, 0.55f),
                 outlineWidth: 0.05f, bevel: false, glow: false);
 
@@ -148,10 +148,10 @@ namespace BlackjackGame.EditorTools
 
             // Soft drop shadow lifts text off the felt.
             material.EnableKeyword(ShaderUtilities.Keyword_Underlay);
-            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.55f));
-            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.6f);
-            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.6f);
-            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.30f);
+            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.45f));
+            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.45f);
+            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.45f);
+            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.42f);
 
             // Bevel and specular exist on TextMeshPro/Distance Field but not on the Mobile
             // variants, and only ID_BevelAmount has a ShaderUtilities constant — the rest

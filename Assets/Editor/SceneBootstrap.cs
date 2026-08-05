@@ -222,18 +222,29 @@ namespace BlackjackGame.EditorTools
                 ("_economyConfig", economyConfig));
 
             Canvas canvas = CreateCanvas();
-            Transform root = canvas.transform;
             // The crest, wordmark, tagline, house rules and corner props are all static,
             // so they stay part of the render rather than being rebuilt as UI objects.
-            CreateBackground(root, Color.white, LoadSprite(MenuBackgroundPath));
+            // The background sits OUTSIDE the safe area (full bleed, aspect-fitted);
+            // everything live sits inside it.
+            CreateBackground(canvas.transform, Color.white, LoadSprite(MenuBackgroundPath));
+            Transform root = CreateSafeArea(canvas.transform);
 
-            // ---- top bar: balance pill + quick-action circles -------------------
-            CreateFrame(root, "BalancePill", "pill", new Vector2(-300f, 856f), new Vector2(400f, 104f));
-            CreateSpriteImage(root, "CoinIcon", "icon_coin", new Vector2(-444f, 856f), 78f);
-            CreateSpriteImage(root, "AddChipsIcon", "icon_plus", new Vector2(-154f, 856f), 46f);
-            TMP_Text balanceLabel = CreateText(root, "BalanceLabel", "0",
-                new Vector2(-294f, 856f), new Vector2(240f, 80f), 50f,
+            // ---- top bar: pinned to the top edge --------------------------------
+            // Laid out in reference-centre space, then re-anchored to the top so it
+            // hugs the safe area on any screen. Everything fits inside ±480 — the
+            // canvas is only ~978 units wide on a 19.5:9 phone.
+            GameObject topBar = NewUIObject("TopBar", root);
+            Stretch(topBar);
+            Transform bar = topBar.transform;
+
+            CreateFrame(bar, "BalancePill", "pill", new Vector2(-176f, 864f), new Vector2(340f, 100f));
+            CreateSpriteImage(bar, "CoinIcon", "icon_coin", new Vector2(-306f, 864f), 74f);
+            TMP_Text balanceLabel = CreateText(bar, "BalanceLabel", "0",
+                new Vector2(-192f, 864f), new Vector2(200f, 78f), 48f,
                 TextAlignmentOptions.Center, TextStyle.DisplayGold);
+            // The + is a real button now — the fastest route to the store from anywhere.
+            Button addChipsButton = CreateCircleButton(bar, "AddChipsButton", "icon_plus",
+                new Vector2(-36f, 864f), 68f);
 
             // Quick-action circles: gift (daily-reward shortcut), settings, stats.
             string[] quickIcons = { "icon_gift", "icon_settings", "icon_trophy" };
@@ -241,17 +252,20 @@ namespace BlackjackGame.EditorTools
             var quickButtons = new Button[quickIcons.Length];
             for (int i = 0; i < quickIcons.Length; i++)
             {
-                var at = new Vector2(SrcX(722f + i * 108f), SrcY(70f));
-                quickButtons[i] = CreateCircleButton(root, $"Quick{quickNames[i]}", quickIcons[i], at, 100f);
+                var at = new Vector2(230f + i * 102f, 864f);
+                quickButtons[i] = CreateCircleButton(bar, $"Quick{quickNames[i]}", quickIcons[i], at, 92f);
             }
+            PulsingDot giftDot = CreateGiftDot(quickButtons[0], 92f);
+            AnchorChildren(bar, toTop: true);
 
             // ---- action rows, on the render's own marks --------------------------
             Button playButton = CreateMenuRow(root, "PlayButton", "btn_green", "icon_cards",
-                "PLAY", "DEAL YOUR LUCK", new Vector2(SrcX(513), SrcY(815)));
+                "PLAY", "DEAL YOUR LUCK", new Vector2(SrcX(513), SrcY(815)), out _);
             Button storeButton = CreateMenuRow(root, "StoreButton", "btn_blue", "icon_cart",
-                "STORE", "GET CHIPS & ITEMS", new Vector2(SrcX(513), SrcY(982)));
+                "STORE", "GET CHIPS & ITEMS", new Vector2(SrcX(513), SrcY(982)), out _);
             Button rewardsButton = CreateMenuRow(root, "RewardsButton", "btn_red", "icon_gift",
-                "DAILY REWARDS", "CLAIM YOUR PRIZE", new Vector2(SrcX(513), SrcY(1144)));
+                "DAILY REWARDS", "CLAIM YOUR PRIZE", new Vector2(SrcX(513), SrcY(1144)),
+                out TMP_Text rewardsSubtitle);
 
             TMP_Text rewardStatusLabel = CreateText(root, "RewardStatusLabel", "",
                 new Vector2(SrcX(513), SrcY(1258)), new Vector2(940f, 60f), 32f,
@@ -259,6 +273,7 @@ namespace BlackjackGame.EditorTools
 
             SettingsPanel settingsPanel = CreateSettingsPanel(root);
             StatsPanel statsPanel = CreateStatsPanel(root);
+            CreateFader(canvas.transform);
 
             var balanceRollup = balanceLabel.gameObject.AddComponent<CountRollup>();
             var rewardPunch = rewardStatusLabel.gameObject.AddComponent<LabelPunch>();
@@ -268,13 +283,16 @@ namespace BlackjackGame.EditorTools
                 ("_playButton", playButton),
                 ("_storeButton", storeButton),
                 ("_rewardsButton", rewardsButton),
+                ("_addChipsButton", addChipsButton),
                 ("_giftButton", quickButtons[0]),
+                ("_giftDot", giftDot),
                 ("_settingsButton", quickButtons[1]),
                 ("_trophyButton", quickButtons[2]),
                 ("_settingsPanel", settingsPanel),
                 ("_statsPanel", statsPanel),
                 ("_balanceLabel", balanceLabel),
                 ("_rewardStatusLabel", rewardStatusLabel),
+                ("_rewardsRowSubtitle", rewardsSubtitle),
                 ("_balanceRollup", balanceRollup),
                 ("_rewardPunch", rewardPunch));
 
@@ -288,38 +306,44 @@ namespace BlackjackGame.EditorTools
             new GameObject("GameManager").AddComponent<GameManager>();
 
             Canvas canvas = CreateCanvas();
-            Transform root = canvas.transform;
 
             // The whole table — rail, chip tray, shoe, felt, arc text, spade medallion —
-            // is the concept render itself with the dynamic bits inpainted out. Positions
-            // below are the render's own, mapped through SrcX/SrcY.
-            CreateBackground(root, Color.white, LoadSprite(TableBackgroundPath));
+            // is the concept render itself with the dynamic bits inpainted out. It stays
+            // full-bleed outside the safe area; all live UI goes inside it.
+            CreateBackground(canvas.transform, Color.white, LoadSprite(TableBackgroundPath));
+            Transform safe = CreateSafeArea(canvas.transform);
 
             // Everything except the background hangs off this wrapper so the screen shake
             // can move the table's contents without dragging the backdrop with it — a
             // shaking background would expose the canvas edges.
-            GameObject shakeRoot = NewUIObject("Content", root);
+            GameObject shakeRoot = NewUIObject("Content", safe);
             Stretch(shakeRoot);
-            root = shakeRoot.transform;
+            Transform root = shakeRoot.transform;
 
-            // --- top bar ---------------------------------------------------------
-            // Back arrow, then the balance pill — the same arrangement the store render
-            // uses. The pill is nudged right of the render's position so the two don't
-            // collide: at the render's x they overlapped by ~50px.
-            Button backButton = CreateCircleButton(root, "BackButton", "icon_back",
-                new Vector2(SrcX(62), SrcY(70)), 100f);
+            // --- top bar, pinned to the top edge ---------------------------------
+            // Laid out in reference-centre space then re-anchored, same as the menu.
+            // Everything sits inside ±480 so nothing clips on a 19.5:9 canvas.
+            GameObject topBar = NewUIObject("TopBar", root);
+            Stretch(topBar);
+            Transform bar = topBar.transform;
 
-            CreateFrame(root, "BalancePill", "pill",
-                new Vector2(SrcX(300), SrcY(70)), new Vector2(360f, 96f));
-            CreateSpriteImage(root, "CoinIcon", "icon_coin", new Vector2(SrcX(154), SrcY(70)), 72f);
-            CreateSpriteImage(root, "AddChipsIcon", "icon_plus", new Vector2(SrcX(446), SrcY(70)), 42f);
-            TMP_Text balanceLabel = CreateText(root, "BalanceLabel", "0",
-                new Vector2(SrcX(304), SrcY(70)), new Vector2(200f, 72f), 46f,
+            Button backButton = CreateCircleButton(bar, "BackButton", "icon_back",
+                new Vector2(-430f, 864f), 92f);
+
+            CreateFrame(bar, "BalancePill", "pill",
+                new Vector2(-176f, 864f), new Vector2(330f, 96f));
+            CreateSpriteImage(bar, "CoinIcon", "icon_coin", new Vector2(-302f, 864f), 68f);
+            TMP_Text balanceLabel = CreateText(bar, "BalanceLabel", "0",
+                new Vector2(-186f, 864f), new Vector2(190f, 72f), 44f,
                 TextAlignmentOptions.Center, TextStyle.DisplayGold);
+            Button addChipsButton = CreateCircleButton(bar, "AddChipsButton", "icon_plus",
+                new Vector2(-42f, 864f), 64f);
 
-            Button giftButton = CreateCircleButton(root, "QuickGift", "icon_gift", new Vector2(SrcX(722), SrcY(70)), 100f);
-            Button settingsButton = CreateCircleButton(root, "QuickSettings", "icon_settings", new Vector2(SrcX(830), SrcY(70)), 100f);
-            Button trophyButton = CreateCircleButton(root, "QuickTrophy", "icon_trophy", new Vector2(SrcX(938), SrcY(70)), 100f);
+            Button giftButton = CreateCircleButton(bar, "QuickGift", "icon_gift", new Vector2(230f, 864f), 92f);
+            Button settingsButton = CreateCircleButton(bar, "QuickSettings", "icon_settings", new Vector2(332f, 864f), 92f);
+            Button trophyButton = CreateCircleButton(bar, "QuickTrophy", "icon_trophy", new Vector2(434f, 864f), 92f);
+            PulsingDot giftDot = CreateGiftDot(giftButton, 92f);
+            AnchorChildren(bar, toTop: true);
 
             // --- dealer ----------------------------------------------------------
             HandView dealerHandView = CreateHandView(root, "DealerHandView",
@@ -331,14 +355,27 @@ namespace BlackjackGame.EditorTools
             // --- player ----------------------------------------------------------
             HandView playerHandView = CreateHandView(root, "PlayerHandView",
                 new Vector2(SrcX(470), SrcY(828)), new Vector2(206f, 288f));
+
+            // Split layout: one view per hand, flanking the betting spot, with a result
+            // badge under each. Smaller cards and a tighter span keep two grown hands
+            // from touching in the middle.
+            HandView splitHandLeft = CreateHandView(root, "SplitHandLeft",
+                new Vector2(-236f, SrcY(828)), new Vector2(168f, 235f), maxSpan: 296f);
+            HandView splitHandRight = CreateHandView(root, "SplitHandRight",
+                new Vector2(236f, SrcY(828)), new Vector2(168f, 235f), maxSpan: 296f);
+            TMP_Text splitBadgeLeft = CreateBadge(root, "SplitBadgeLeft",
+                new Vector2(-236f, SrcY(828) - 198f));
+            TMP_Text splitBadgeRight = CreateBadge(root, "SplitBadgeRight",
+                new Vector2(236f, SrcY(828) - 198f));
+
             TMP_Text playerHandLabel = CreateText(root, "PlayerHandLabel", "Place your bet",
-                new Vector2(SrcX(512), SrcY(636)), new Vector2(820f, 60f), 40f,
+                new Vector2(SrcX(512), SrcY(658)), new Vector2(820f, 60f), 40f,
                 TextAlignmentOptions.Center, TextStyle.BodyGold);
 
             // Bet chip sits to the right of the hand. HandView caps how wide a hand may
             // spread, so this clears the cards even on a heavily-hit hand — at the
             // render's own x it was overlapped by the third card onward.
-            var betChipSpot = new Vector2(SrcX(900), SrcY(884));
+            var betChipSpot = new Vector2(405f, SrcY(884));
             Image betChipImage = CreateSpriteImage(root, "BetChip", "chip_stack", betChipSpot, 150f);
 
             // The sprite's baked "100" is painted out by the art pipeline, so the stake is
@@ -356,66 +393,70 @@ namespace BlackjackGame.EditorTools
 
             var betChip = betChipImage.gameObject.AddComponent<BetChipView>();
             Wire(betChip, ("_label", betChipLabel));
-            // Chip flies out of, and back into, the balance pill in the top bar.
+            // Chip flies out of, and back into, the balance pill in the top bar. The
+            // runtime corrects this for the live safe area; the baked value is the
+            // reference-canvas position so the editor preview still reads right.
             var chipSo = new SerializedObject(betChip);
-            chipSo.FindProperty("_flyFrom").vector2Value = new Vector2(SrcX(300), SrcY(70));
+            chipSo.FindProperty("_flyFrom").vector2Value = new Vector2(-176f, 864f);
             chipSo.FindProperty("_loseTo").vector2Value = new Vector2(SrcX(516), SrcY(300));
             chipSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // The resting stack is tappable — the natural way to take a bet back.
+            betChipImage.raycastTarget = true;
+            var betChipButton = betChipImage.gameObject.AddComponent<Button>();
+            betChipButton.targetGraphic = betChipImage;
+            betChipButton.transition = Selectable.Transition.None; // BetChipView owns its motion
 
             TMP_Text outcomeLabel = CreateText(root, "OutcomeLabel", "",
                 new Vector2(SrcX(512), SrcY(1046)), new Vector2(1000f, 90f), 56f,
                 TextAlignmentOptions.Center, TextStyle.DisplayGold);
 
             // --- control band: bet row and action row share the same strip ---------
-            // HIT and STAND are the two moves a player makes on nearly every hand, so they
-            // take the larger frames and the middle of the rail, where a thumb rests.
-            // DOUBLE and SPLIT are situational and sit outboard, smaller.
+            // Rows are laid out in reference-centre space inside a 960-wide budget (so
+            // nothing clips on tall phones), then re-anchored to the BOTTOM edge so the
+            // strip rides the safe area above home-indicator bars.
             //
-            // Sizes and spacing come from one rule rather than four hand-placed marks: the
-            // gutter is whatever is left after the four buttons, split evenly. That keeps
-            // the row balanced and symmetric if the sizes are ever retuned.
+            // Sizes and spacing come from one rule rather than hand-placed marks: the
+            // gutter is whatever is left after the buttons, split evenly.
             float bandY = SrcY(1179);
-            var primarySize = new Vector2(262f, 208f);
-            var secondarySize = new Vector2(208f, 172f);
-            const float bandMargin = 18f;
+            const float bandUsable = 960f;
+            const float bandMargin = 16f;
 
-            // Left to right: DOUBLE, HIT, STAND, SPLIT.
-            float[] widths = { secondarySize.x, primarySize.x, primarySize.x, secondarySize.x };
-            float usedWidth = 0f;
-            foreach (float w in widths) usedWidth += w;
-            float gutter = (1080f - 2f * bandMargin - usedWidth) / (widths.Length - 1);
-
-            var slots = new float[widths.Length];
-            float cursor = -540f + bandMargin;
-            for (int i = 0; i < widths.Length; i++)
-            {
-                slots[i] = cursor + widths[i] * 0.5f;
-                cursor += widths[i] + gutter;
-            }
-
-            // Bet row: [-] [ amount ] [+]  then a wide DEAL. The steppers exist because
-            // typing a number on a phone means opening a keyboard over the table; most
-            // players just want to nudge the stake and deal.
-            // No "BET" caption: the only clear space above the row is occupied by the
-            // table's gold arc, and a label there collides with it. The steppers either
-            // side of a number, next to DEAL, carry the meaning on their own.
+            // Bet row: four denomination chips, then a wide DEAL. Tapping chips stacks
+            // the stake on the felt (see GameTableUI); there is no keyboard anywhere.
             CanvasGroup betRow = CreateRow(root, "BetRow");
 
-            Button betMinusButton = CreateActionButton(betRow.transform, "BetMinusButton", null, "-",
-                new Vector2(-462f, bandY), new Vector2(108f, 132f), "btn_dark", SplitGlow);
-            TMP_InputField betInput = CreateInputField(betRow.transform, "BetInput", "100",
-                new Vector2(-242f, bandY), new Vector2(304f, 144f));
-            Button betPlusButton = CreateActionButton(betRow.transform, "BetPlusButton", null, "+",
-                new Vector2(-22f, bandY), new Vector2(108f, 132f), "btn_dark", SplitGlow);
+            int[] chipValues = { 100, 500, 1000, 5000 };
+            string[] chipLabels = { "100", "500", "1K", "5K" };
+            const float chipDiameter = 106f;
+            const float dealWidth = 330f;
 
+            float[] betWidths = { chipDiameter, chipDiameter, chipDiameter, chipDiameter, dealWidth };
+            float[] betSlots = LayoutSlots(betWidths, bandUsable, bandMargin);
+
+            var chipButtons = new Button[chipValues.Length];
+            for (int i = 0; i < chipValues.Length; i++)
+            {
+                chipButtons[i] = CreateChipButton(betRow.transform, $"Chip{chipValues[i]}",
+                    chipLabels[i], new Vector2(betSlots[i], bandY), chipDiameter);
+            }
             Button dealButton = CreateActionButton(betRow.transform, "DealButton", null, "DEAL",
-                new Vector2(288f, bandY), new Vector2(424f, 176f),
+                new Vector2(betSlots[4], bandY), new Vector2(dealWidth, 170f),
                 "btn_green", HitGlow);
+            AnchorChildren(betRow.transform, toTop: false);
 
             // Each action gets its own colour so it can be found by hue rather than by
             // reading four near-identical labels: green to take a card, red to stop,
             // blue to commit more chips, gold to break the hand in two.
+            // HIT and STAND are the two moves a player makes on nearly every hand, so they
+            // take the larger frames and the middle of the rail, where a thumb rests.
             CanvasGroup actionRow = CreateRow(root, "ActionRow");
+            var primarySize = new Vector2(246f, 200f);
+            var secondarySize = new Vector2(188f, 164f);
+
+            float[] actionWidths = { secondarySize.x, primarySize.x, primarySize.x, secondarySize.x };
+            float[] slots = LayoutSlots(actionWidths, bandUsable, bandMargin);
+
             Button doubleButton = CreateActionButton(actionRow.transform, "DoubleButton", "icon_double", "DOUBLE",
                 new Vector2(slots[0], bandY), secondarySize, "btn_blue", DoubleGlow);
             Button hitButton = CreateActionButton(actionRow.transform, "HitButton", "icon_hit", "HIT",
@@ -424,9 +465,11 @@ namespace BlackjackGame.EditorTools
                 new Vector2(slots[2], bandY), primarySize, "btn_red", StandGlow);
             Button splitButton = CreateActionButton(actionRow.transform, "SplitButton", "icon_split", "SPLIT",
                 new Vector2(slots[3], bandY), secondarySize, "btn_dark", SplitGlow);
+            AnchorChildren(actionRow.transform, toTop: false);
 
             SettingsPanel settingsPanel = CreateSettingsPanel(root);
             StatsPanel statsPanel = CreateStatsPanel(root);
+            CreateFader(canvas.transform);
 
             // Juice. The shake lives on the content wrapper rather than the Canvas: a
             // ScreenSpaceOverlay canvas has its transform driven by the canvas system
@@ -437,10 +480,7 @@ namespace BlackjackGame.EditorTools
 
             var ui = canvas.gameObject.AddComponent<GameTableUI>();
             Wire(ui,
-                ("_betInput", betInput),
                 ("_dealButton", dealButton),
-                ("_betMinusButton", betMinusButton),
-                ("_betPlusButton", betPlusButton),
                 ("_betRow", betRow),
                 ("_actionRow", actionRow),
                 ("_hitButton", hitButton),
@@ -449,12 +489,18 @@ namespace BlackjackGame.EditorTools
                 ("_splitButton", splitButton),
                 ("_dealerHandView", dealerHandView),
                 ("_playerHandView", playerHandView),
+                ("_splitHandLeft", splitHandLeft),
+                ("_splitHandRight", splitHandRight),
+                ("_splitBadgeLeft", splitBadgeLeft),
+                ("_splitBadgeRight", splitBadgeRight),
                 ("_dealerHandLabel", dealerHandLabel),
                 ("_playerHandLabel", playerHandLabel),
                 ("_outcomeLabel", outcomeLabel),
                 ("_balanceLabel", balanceLabel),
                 ("_backButton", backButton),
+                ("_addChipsButton", addChipsButton),
                 ("_giftButton", giftButton),
+                ("_giftDot", giftDot),
                 ("_settingsButton", settingsButton),
                 ("_trophyButton", trophyButton),
                 ("_settingsPanel", settingsPanel),
@@ -462,9 +508,45 @@ namespace BlackjackGame.EditorTools
                 ("_balanceRollup", balanceRollup),
                 ("_outcomePunch", outcomePunch),
                 ("_shake", shake),
-                ("_betChip", betChip));
+                ("_betChip", betChip),
+                ("_betChipButton", betChipButton));
+
+            // Chip buttons and their values are arrays, which Wire's tuple form can't
+            // reach — set them through SerializedObject like the store's artwork array.
+            var uiSo = new SerializedObject(ui);
+            SerializedProperty buttonsProp = uiSo.FindProperty("_chipButtons");
+            SerializedProperty valuesProp = uiSo.FindProperty("_chipValues");
+            buttonsProp.arraySize = chipButtons.Length;
+            valuesProp.arraySize = chipValues.Length;
+            for (int i = 0; i < chipButtons.Length; i++)
+            {
+                buttonsProp.GetArrayElementAtIndex(i).objectReferenceValue = chipButtons[i];
+                valuesProp.GetArrayElementAtIndex(i).intValue = chipValues[i];
+            }
+            uiSo.ApplyModifiedPropertiesWithoutUndo();
 
             SaveScene(scene, GameScenePath);
+        }
+
+        /// <summary>
+        /// Centres of <paramref name="widths"/> laid left to right across a strip
+        /// <paramref name="usable"/> wide with even gutters — the one spacing rule every
+        /// control band shares.
+        /// </summary>
+        private static float[] LayoutSlots(float[] widths, float usable, float margin)
+        {
+            float used = 0f;
+            foreach (float w in widths) used += w;
+            float gutter = (usable - 2f * margin - used) / (widths.Length - 1);
+
+            var slots = new float[widths.Length];
+            float cursor = -usable * 0.5f + margin;
+            for (int i = 0; i < widths.Length; i++)
+            {
+                slots[i] = cursor + widths[i] * 0.5f;
+                cursor += widths[i] + gutter;
+            }
+            return slots;
         }
 
         private static void BuildStoreScene()
@@ -480,30 +562,35 @@ namespace BlackjackGame.EditorTools
             StorePackRow packRowPrefab = prefabGo.GetComponent<StorePackRow>();
 
             Canvas canvas = CreateCanvas();
-            Transform root = canvas.transform;
 
             // "GET CHIPS", "TAP TO PURCHASE" and the corner chip stacks are static, so they
             // stay part of the render. Only the rows and the top bar are rebuilt live.
-            CreateBackground(root, Color.white, LoadSprite(StoreBackgroundPath));
+            CreateBackground(canvas.transform, Color.white, LoadSprite(StoreBackgroundPath));
+            Transform root = CreateSafeArea(canvas.transform);
 
-            Button backButton = CreateCircleButton(root, "BackButton", "icon_back",
-                new Vector2(SrcX(62), SrcY(70)), 100f);
-            CreateFrame(root, "BalancePill", "pill",
-                new Vector2(SrcX(300), SrcY(70)), new Vector2(360f, 96f));
-            CreateSpriteImage(root, "CoinIcon", "icon_coin", new Vector2(SrcX(154), SrcY(70)), 72f);
-            CreateSpriteImage(root, "AddChipsIcon", "icon_plus", new Vector2(SrcX(446), SrcY(70)), 42f);
-            TMP_Text balanceLabel = CreateText(root, "BalanceLabel", "0",
-                new Vector2(SrcX(304), SrcY(70)), new Vector2(200f, 72f), 46f,
+            // --- top bar, pinned to the top edge (same bar as the game scene) ------
+            GameObject topBar = NewUIObject("TopBar", root);
+            Stretch(topBar);
+            Transform barT = topBar.transform;
+
+            Button backButton = CreateCircleButton(barT, "BackButton", "icon_back",
+                new Vector2(-430f, 864f), 92f);
+            CreateFrame(barT, "BalancePill", "pill",
+                new Vector2(-176f, 864f), new Vector2(330f, 96f));
+            CreateSpriteImage(barT, "CoinIcon", "icon_coin", new Vector2(-302f, 864f), 68f);
+            TMP_Text balanceLabel = CreateText(barT, "BalanceLabel", "0",
+                new Vector2(-186f, 864f), new Vector2(190f, 72f), 44f,
                 TextAlignmentOptions.Center, TextStyle.DisplayGold);
 
-            Button giftButton = CreateCircleButton(root, "QuickGift", "icon_gift", new Vector2(SrcX(722), SrcY(70)), 100f);
-            Button settingsButton = CreateCircleButton(root, "QuickSettings", "icon_settings", new Vector2(SrcX(830), SrcY(70)), 100f);
-            Button trophyButton = CreateCircleButton(root, "QuickTrophy", "icon_trophy", new Vector2(SrcX(938), SrcY(70)), 100f);
+            Button giftButton = CreateCircleButton(barT, "QuickGift", "icon_gift", new Vector2(230f, 864f), 92f);
+            Button settingsButton = CreateCircleButton(barT, "QuickSettings", "icon_settings", new Vector2(332f, 864f), 92f);
+            Button trophyButton = CreateCircleButton(barT, "QuickTrophy", "icon_trophy", new Vector2(434f, 864f), 92f);
+            AnchorChildren(barT, toTop: true);
 
             // Pack rows are instantiated into this container at runtime by StoreUI. The
-            // container spans exactly the band the render's four rows occupy.
+            // container spans the band the render's four rows occupy, inside the 960 budget.
             GameObject listGo = NewUIObject("PackList", root);
-            Place(listGo, new Vector2(SrcX(512), SrcY(900)), new Vector2(960f, 960f));
+            Place(listGo, new Vector2(SrcX(512), SrcY(900)), new Vector2(940f, 960f));
             var layout = listGo.AddComponent<VerticalLayoutGroup>();
             layout.spacing = 16f;
             layout.padding = new RectOffset(0, 0, 0, 0);
@@ -523,8 +610,54 @@ namespace BlackjackGame.EditorTools
                 TextAlignmentOptions.Center, TextStyle.BodyInk);
             storeDisclaimer.alpha = 0.5f;
 
+            // --- purchase-flow chrome ---------------------------------------------
+            // A veil that blocks the screen while billing runs, and a success modal that
+            // springs in when chips land. Both start inactive; StoreUI drives them.
+            GameObject processing = NewUIObject("ProcessingOverlay", root);
+            Stretch(processing);
+            CreateBackdrop(processing.transform);
+            CreateText(processing.transform, "Label", "PROCESSING…", new Vector2(0f, 0f),
+                new Vector2(700f, 100f), 52f, TextAlignmentOptions.Center, TextStyle.DisplayGold,
+                characterSpacing: 4f);
+            processing.SetActive(false);
+
+            GameObject successRoot = NewUIObject("PurchaseSuccessPanel", root);
+            Stretch(successRoot);
+            Button successBackdrop = CreateBackdrop(successRoot.transform);
+
+            var successSize = new Vector2(680f, 520f);
+            GameObject successFrame = NewUIObject("Frame", successRoot.transform);
+            Place(successFrame, Vector2.zero, successSize);
+            var successImage = successFrame.AddComponent<Image>();
+            successImage.sprite = UiSprite("panel");
+            successImage.type = Image.Type.Sliced;
+            successImage.pixelsPerUnitMultiplier = 1f;
+            Transform st = successFrame.transform;
+
+            CreateText(st, "Title", "PURCHASE COMPLETE", new Vector2(0f, successSize.y / 2f - 78f),
+                new Vector2(successSize.x - 90f, 80f), 44f, TextAlignmentOptions.Center,
+                TextStyle.DisplayGold, characterSpacing: 3f);
+            CreateSpriteImage(st, "ChipArt", "chips_3", new Vector2(0f, 46f), 170f);
+            TMP_Text successAmount = CreateText(st, "Amount", "+0 CHIPS",
+                new Vector2(0f, -78f), new Vector2(successSize.x - 120f, 84f), 58f,
+                TextAlignmentOptions.Center, TextStyle.DisplayGold, characterSpacing: 2f);
+            successAmount.enableAutoSizing = true;
+            successAmount.fontSizeMin = 30f;
+            successAmount.fontSizeMax = 58f;
+
+            Button successClose = CreateFrameButton(st, "CollectButton", "btn_green",
+                new Vector2(0f, -successSize.y / 2f + 92f), new Vector2(320f, 96f));
+            CreateText(successClose.transform, "Label", "COLLECT", Vector2.zero,
+                new Vector2(280f, 72f), 36f, TextAlignmentOptions.Center, TextStyle.DisplayGold,
+                characterSpacing: 2f);
+            successClose.gameObject.AddComponent<ButtonJuice>();
+
+            successFrame.AddComponent<PanelPop>();
+            successRoot.SetActive(false);
+
             SettingsPanel settingsPanel = CreateSettingsPanel(root);
             StatsPanel statsPanel = CreateStatsPanel(root);
+            CreateFader(canvas.transform);
 
             var balanceRollup = balanceLabel.gameObject.AddComponent<CountRollup>();
             var statusPunch = statusLabel.gameObject.AddComponent<LabelPunch>();
@@ -536,6 +669,11 @@ namespace BlackjackGame.EditorTools
                 ("_balanceLabel", balanceLabel),
                 ("_statusLabel", statusLabel),
                 ("_backButton", backButton),
+                ("_processingOverlay", processing),
+                ("_successPanel", successRoot),
+                ("_successAmountLabel", successAmount),
+                ("_successCloseButton", successClose),
+                ("_successBackdropButton", successBackdrop),
                 ("_giftButton", giftButton),
                 ("_settingsButton", settingsButton),
                 ("_trophyButton", trophyButton),
@@ -1028,9 +1166,11 @@ namespace BlackjackGame.EditorTools
             return button;
         }
 
-        /// <summary>One main-menu row: gold frame, icon, TMP title + subtitle, chevron.</summary>
+        /// <summary>One main-menu row: gold frame, icon, TMP title + subtitle, chevron.
+        /// The subtitle comes back out so screens can keep it live (the DAILY REWARDS row
+        /// mirrors the reward state there).</summary>
         private static Button CreateMenuRow(Transform parent, string name, string frame,
-            string icon, string label, string subLabel, Vector2 position)
+            string icon, string label, string subLabel, Vector2 position, out TMP_Text subtitle)
         {
             var size = new Vector2(888f, 176f);
             Button button = CreateFrameButton(parent, name, frame, position, size);
@@ -1039,9 +1179,16 @@ namespace BlackjackGame.EditorTools
             CreateSpriteImage(t, "Icon", icon, new Vector2(-size.x / 2f + 96f, 0f), 76f);
             CreateSpriteImage(t, "Chevron", "icon_chevron", new Vector2(size.x / 2f - 78f, 0f), 54f);
 
-            CreateText(t, "Label", label, new Vector2(20f, 24f), new Vector2(size.x - 220f, 74f),
-                58f, TextAlignmentOptions.Center, TextStyle.DisplayGold, characterSpacing: 4f);
-            CreateText(t, "SubLabel", subLabel, new Vector2(20f, -34f),
+            TMP_Text title = CreateText(t, "Label", label, new Vector2(20f, 24f),
+                new Vector2(size.x - 220f, 74f), 58f, TextAlignmentOptions.Center,
+                TextStyle.DisplayGold, characterSpacing: 4f);
+            // "DAILY REWARDS" is a third longer than "PLAY"; shrink-to-fit keeps long
+            // titles inside the frame instead of kissing the icon and chevron.
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 36f;
+            title.fontSizeMax = 58f;
+
+            subtitle = CreateText(t, "SubLabel", subLabel, new Vector2(20f, -34f),
                 new Vector2(size.x - 220f, 44f), 30f, TextAlignmentOptions.Center,
                 TextStyle.BodyInk, characterSpacing: 4f);
 
@@ -1050,14 +1197,20 @@ namespace BlackjackGame.EditorTools
         }
 
         /// <summary>Full-canvas dim layer behind a modal panel — blocks clicks to whatever
-        /// is underneath while the panel is open.</summary>
-        private static void CreateBackdrop(Transform parent)
+        /// is underneath while the panel is open, and doubles as the tap-outside-to-close
+        /// target (the panel scripts wire its Button to Hide).</summary>
+        private static Button CreateBackdrop(Transform parent)
         {
             GameObject go = NewUIObject("Backdrop", parent);
             Stretch(go);
             var image = go.AddComponent<Image>();
             image.color = new Color(0f, 0f, 0f, 0.72f);
             image.raycastTarget = true;
+
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.transition = Selectable.Transition.None; // an invisible veil shouldn't tint
+            return button;
         }
 
         /// <summary>
@@ -1071,7 +1224,7 @@ namespace BlackjackGame.EditorTools
             GameObject root = NewUIObject("SettingsPanel", parent);
             Stretch(root);
 
-            CreateBackdrop(root.transform);
+            Button backdropButton = CreateBackdrop(root.transform);
 
             GameObject frameGo = NewUIObject("Frame", root.transform);
             Place(frameGo, Vector2.zero, size);
@@ -1107,6 +1260,7 @@ namespace BlackjackGame.EditorTools
 
             var panel = root.AddComponent<SettingsPanel>();
             Wire(panel,
+                ("_backdropButton", backdropButton),
                 ("_closeButton", closeButton),
                 ("_muteButton", muteButton),
                 ("_muteLabel", muteLabel),
@@ -1128,7 +1282,7 @@ namespace BlackjackGame.EditorTools
             GameObject root = NewUIObject("StatsPanel", parent);
             Stretch(root);
 
-            CreateBackdrop(root.transform);
+            Button backdropButton = CreateBackdrop(root.transform);
 
             GameObject frameGo = NewUIObject("Frame", root.transform);
             Place(frameGo, Vector2.zero, size);
@@ -1170,6 +1324,7 @@ namespace BlackjackGame.EditorTools
 
             var panel = root.AddComponent<StatsPanel>();
             Wire(panel,
+                ("_backdropButton", backdropButton),
                 ("_closeButton", closeButton),
                 ("_levelLabel", levelLabel),
                 ("_handsLabel", handsLabel),
@@ -1184,7 +1339,6 @@ namespace BlackjackGame.EditorTools
         private static Image CreateBackground(Transform parent, Color color, Sprite sprite = null)
         {
             GameObject go = NewUIObject("Background", parent);
-            Stretch(go);
             var image = go.AddComponent<Image>();
             image.color = color;
             image.raycastTarget = false;
@@ -1193,8 +1347,69 @@ namespace BlackjackGame.EditorTools
                 image.sprite = sprite;
                 image.type = Image.Type.Simple;
                 image.preserveAspect = false;
+
+                // Cover the screen at the render's own aspect instead of stretching to
+                // fit it. 20:9 phones crop a little top and bottom; nothing distorts.
+                Place(go, Vector2.zero, ReferenceResolution);
+                var fitter = go.AddComponent<AspectRatioFitter>();
+                fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+                fitter.aspectRatio = sprite.rect.width / sprite.rect.height;
+            }
+            else
+            {
+                Stretch(go);
             }
             return image;
+        }
+
+        /// <summary>
+        /// The rect all live UI lives in: shrunk to the device's safe area at runtime so
+        /// notches and home-indicator strips never cover a control. Backgrounds and the
+        /// scene fader stay outside it, full-bleed.
+        /// </summary>
+        private static Transform CreateSafeArea(Transform canvas)
+        {
+            GameObject go = NewUIObject("SafeArea", canvas);
+            Stretch(go);
+            go.AddComponent<SafeAreaFitter>();
+            return go.transform;
+        }
+
+        /// <summary>
+        /// The scene-transition veil. Added LAST so it draws over everything; it fades
+        /// itself out on scene start and back in when <see cref="SceneFader.TransitionTo"/>
+        /// runs.
+        /// </summary>
+        private static void CreateFader(Transform canvas)
+        {
+            GameObject go = NewUIObject("SceneFader", canvas);
+            Stretch(go);
+            var image = go.AddComponent<Image>();
+            image.color = Color.black;
+            image.raycastTarget = true;
+            go.AddComponent<SceneFader>();
+        }
+
+        /// <summary>
+        /// Re-anchors every direct child of <paramref name="container"/> from the canvas
+        /// centre to its top or bottom edge, preserving where each child sits on the
+        /// reference canvas. Layout code keeps thinking in one coordinate space; this
+        /// pins the finished strip to the screen edge so it tracks tall displays and the
+        /// safe area instead of floating loose in the middle.
+        /// </summary>
+        private static void AnchorChildren(Transform container, bool toTop)
+        {
+            float half = ReferenceResolution.y * 0.5f;
+            foreach (Transform child in container)
+            {
+                var rect = child as RectTransform;
+                if (rect == null) continue;
+                Vector2 p = rect.anchoredPosition;
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, toTop ? 1f : 0f);
+                rect.anchoredPosition = toTop
+                    ? new Vector2(p.x, p.y - half)
+                    : new Vector2(p.x, p.y + half);
+            }
         }
 
         /// <summary>
@@ -1202,7 +1417,7 @@ namespace BlackjackGame.EditorTools
         /// two keeps the layout anchor independent of the component's own transform.
         /// </summary>
         private static HandView CreateHandView(Transform parent, string name, Vector2 position,
-            Vector2? cardSize = null)
+            Vector2? cardSize = null, float? maxSpan = null)
         {
             GameObject go = NewUIObject(name, parent);
             Place(go, position, new Vector2(960f, 260f));
@@ -1221,14 +1436,94 @@ namespace BlackjackGame.EditorTools
                 ("_cardRoot", rootGo.GetComponent<RectTransform>()),
                 ("_shadowSprite", UiSprite("card_shadow")));
 
-            if (cardSize.HasValue)
+            if (cardSize.HasValue || maxSpan.HasValue)
             {
                 var so = new SerializedObject(view);
-                so.FindProperty("_cardSize").vector2Value = cardSize.Value;
+                if (cardSize.HasValue) so.FindProperty("_cardSize").vector2Value = cardSize.Value;
+                if (maxSpan.HasValue) so.FindProperty("_maxSpan").floatValue = maxSpan.Value;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
 
             return view;
+        }
+
+        /// <summary>
+        /// A denomination chip: the render's own chip-stack art with a live value label,
+        /// juiced like every other button. One tap adds its value to the stake.
+        /// </summary>
+        private static Button CreateChipButton(Transform parent, string name, string label,
+            Vector2 position, float diameter)
+        {
+            GameObject go = NewUIObject(name, parent);
+            Place(go, position, new Vector2(diameter, diameter));
+
+            var image = go.AddComponent<Image>();
+            image.sprite = UiSprite("chip_stack");
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
+
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
+            colors.pressedColor = new Color(0.80f, 0.80f, 0.80f, 1f);
+            colors.disabledColor = new Color(0.45f, 0.46f, 0.45f, 0.8f);
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+
+            // The chip art's face is blanked by the pipeline; the value is drawn live,
+            // slightly above centre where the stack's top face sits.
+            TMP_Text text = CreateText(go.transform, "Value", label,
+                new Vector2(0f, diameter * 0.05f), new Vector2(diameter * 0.72f, diameter * 0.4f),
+                diameter * 0.26f, TextAlignmentOptions.Center, TextStyle.DisplayGold);
+            text.enableAutoSizing = true;
+            text.fontSizeMin = 14f;
+            text.fontSizeMax = diameter * 0.26f;
+
+            go.AddComponent<ButtonJuice>();
+            return button;
+        }
+
+        /// <summary>
+        /// A small result badge under a split hand: a dark pill with a live line of text
+        /// ("14 · 100" while playing, "WIN +100" once settled). Starts hidden — the badge
+        /// only exists while a split is on the table.
+        /// </summary>
+        private static TMP_Text CreateBadge(Transform parent, string name, Vector2 position)
+        {
+            GameObject frameGo = NewUIObject(name, parent);
+            Place(frameGo, position, new Vector2(228f, 58f));
+            var frame = frameGo.AddComponent<Image>();
+            frame.sprite = UiSprite("pill");
+            frame.type = Image.Type.Sliced;
+            frame.pixelsPerUnitMultiplier = 1f;
+            frame.raycastTarget = false;
+
+            TMP_Text text = CreateText(frameGo.transform, "Text", "", Vector2.zero,
+                new Vector2(204f, 44f), 27f, TextAlignmentOptions.Center, TextStyle.BodyInk,
+                characterSpacing: 1f);
+            text.enableAutoSizing = true;
+            text.fontSizeMin = 16f;
+            text.fontSizeMax = 27f;
+
+            frameGo.SetActive(false);
+            return text;
+        }
+
+        /// <summary>The daily-reward notification dot, pinned to the gift button's top-right.</summary>
+        private static PulsingDot CreateGiftDot(Button giftButton, float buttonDiameter)
+        {
+            GameObject go = NewUIObject("RewardDot", giftButton.transform);
+            float r = buttonDiameter * 0.36f;
+            Place(go, new Vector2(buttonDiameter * 0.34f, buttonDiameter * 0.34f), new Vector2(r, r));
+            var image = go.AddComponent<Image>();
+            image.sprite = UiSprite("circle_button");
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
+            image.color = new Color(1f, 0.72f, 0.25f, 1f);
+            image.raycastTarget = false;
+            return go.AddComponent<PulsingDot>();
         }
 
         private static Image CreatePanel(Transform parent, string name, Vector2 position, Vector2 size,
