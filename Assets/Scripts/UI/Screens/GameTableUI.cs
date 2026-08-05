@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using BlackjackGame.Blackjack;
 using BlackjackGame.Blackjack.Cards;
 using BlackjackGame.Core;
+using BlackjackGame.Economy;
 using BlackjackGame.UI.Components;
 using TMPro;
 using UnityEngine;
@@ -20,6 +22,10 @@ namespace BlackjackGame.UI.Screens
         [Header("Bet Controls")]
         [SerializeField] private TMP_InputField _betInput;
         [SerializeField] private Button _dealButton;
+        [SerializeField] private Button _betMinusButton;
+        [SerializeField] private Button _betPlusButton;
+        [Tooltip("How much one tap of - or + moves the stake.")]
+        [SerializeField] private int _betStep = 100;
 
         [Header("Row Swapping")]
         [Tooltip("Betting controls — shown between rounds.")]
@@ -46,6 +52,29 @@ namespace BlackjackGame.UI.Screens
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
 
+        [Header("Quick Actions (top bar)")]
+        [SerializeField] private Button _giftButton;
+        [SerializeField] private Button _settingsButton;
+        [SerializeField] private Button _trophyButton;
+        [SerializeField] private SettingsPanel _settingsPanel;
+        [SerializeField] private StatsPanel _statsPanel;
+
+        [Header("Juice")]
+        [Tooltip("Rolls the balance up instead of snapping it.")]
+        [SerializeField] private CountRollup _balanceRollup;
+        [Tooltip("Slams the outcome text in when a round settles.")]
+        [SerializeField] private LabelPunch _outcomePunch;
+        [Tooltip("Shakes the table on blackjacks and busts.")]
+        [SerializeField] private ScreenShake _shake;
+        [Tooltip("The stake on the felt — flies out on a bet, back on a win.")]
+        [SerializeField] private BetChipView _betChip;
+
+        /// <summary>Outcome tints. Gold for a blackjack, green win, red loss, grey push.</summary>
+        private static readonly Color WinColor = new Color(0.42f, 1f, 0.55f);
+        private static readonly Color LoseColor = new Color(1f, 0.38f, 0.38f);
+        private static readonly Color BlackjackColor = new Color(1f, 0.86f, 0.35f);
+        private static readonly Color PushColor = new Color(0.85f, 0.85f, 0.85f);
+
         private GameManager _game;
 
         /// <summary>
@@ -54,6 +83,9 @@ namespace BlackjackGame.UI.Screens
         /// need clearing so the next Render deals the cards in rather than snapping them.
         /// </summary>
         private BlackjackEngine _renderedEngine;
+
+        /// <summary>True once this round's outcome reaction has played, so it fires once.</summary>
+        private bool _outcomeShown;
 
         private void Start()
         {
@@ -66,24 +98,101 @@ namespace BlackjackGame.UI.Screens
             if (_splitButton != null) _splitButton.onClick.AddListener(() => { _game.Split(); Refresh(); });
             if (_backButton != null) _backButton.onClick.AddListener(() => _game.GoToScene(SceneNames.MainMenu));
 
+            if (_betMinusButton != null) _betMinusButton.onClick.AddListener(() => AdjustBet(-_betStep));
+            if (_betPlusButton != null) _betPlusButton.onClick.AddListener(() => AdjustBet(_betStep));
+
+            if (_giftButton != null) _giftButton.onClick.AddListener(ClaimGift);
+            if (_settingsButton != null && _settingsPanel != null)
+                _settingsButton.onClick.AddListener(_settingsPanel.Show);
+            if (_trophyButton != null && _statsPanel != null)
+                _trophyButton.onClick.AddListener(_statsPanel.Show);
+
             if (_game != null) _game.OnRoundComplete += _ => Refresh();
 
             Refresh();
+        }
+
+        /// <summary>
+        /// Same claim flow as the Main Menu's daily-reward button, surfaced here as a
+        /// quick action. Result is shown in the outcome label — it's free between rounds
+        /// and gets overwritten by the next round's result either way.
+        /// </summary>
+        private void ClaimGift()
+        {
+            if (!AppManager.Exists || _outcomeLabel == null) return;
+
+            DailyRewardResult result = AppManager.Instance.Rewards.TryClaim(DateTime.UtcNow);
+            _outcomeLabel.text = result.Success
+                ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
+                : $"Next reward in {result.TimeUntilNext.Hours}h {result.TimeUntilNext.Minutes}m";
+        }
+
+        /// <summary>The stake currently typed in the field, or 100 if it is empty/unparseable.</summary>
+        private int CurrentBet =>
+            _betInput != null && int.TryParse(_betInput.text, out int parsed) ? parsed : 100;
+
+        /// <summary>Lowest legal stake, from config.</summary>
+        private int MinBet =>
+            AppManager.Exists && AppManager.Instance.GameConfig != null
+                ? AppManager.Instance.GameConfig.MinBet
+                : 1;
+
+        /// <summary>
+        /// Highest legal stake: the configured ceiling, but never more than the player
+        /// actually holds — offering a bet that will be refused is worse than not offering it.
+        /// </summary>
+        private int MaxBet
+        {
+            get
+            {
+                int ceiling = AppManager.Exists && AppManager.Instance.GameConfig != null
+                    ? AppManager.Instance.GameConfig.MaxBet
+                    : int.MaxValue;
+                long affordable = _game != null ? _game.Balance : 0;
+                return (int)Mathf.Min(ceiling, Mathf.Max(MinBet, affordable));
+            }
+        }
+
+        /// <summary>Nudges the stake by one step, clamped to what is legal and affordable.</summary>
+        private void AdjustBet(int delta)
+        {
+            if (_betInput == null) return;
+            int next = Mathf.Clamp(CurrentBet + delta, MinBet, MaxBet);
+            _betInput.text = next.ToString();
+            RefreshBetControls();
+        }
+
+        /// <summary>Greys out a stepper once the stake is against its limit.</summary>
+        private void RefreshBetControls()
+        {
+            int bet = CurrentBet;
+            if (_betMinusButton != null) _betMinusButton.interactable = bet > MinBet;
+            if (_betPlusButton != null) _betPlusButton.interactable = bet < MaxBet;
         }
 
         private void OnDeal()
         {
             int bet = 100;
             if (_betInput != null && int.TryParse(_betInput.text, out var parsed)) bet = parsed;
-            _game.PlaceBetAndDeal(bet);
+
+            // Only throw the chip if the bet was actually accepted — an unaffordable bet
+            // leaves the balance untouched, so a chip sailing onto the felt would lie.
+            bool placed = _game.PlaceBetAndDeal(bet);
+
             if (_outcomeLabel != null) _outcomeLabel.text = "";
+            if (_outcomePunch != null) _outcomePunch.ResetNow();
+            _outcomeShown = false;
+
+            if (placed && _betChip != null) _betChip.PlaceBet(bet);
             Refresh();
         }
 
         private void Refresh()
         {
             // Just the number — it sits inside the coin pill, which carries the meaning.
-            if (_balanceLabel != null) _balanceLabel.text = $"{_game.Balance:N0}";
+            // The rollup owns the label's text when present, so don't write both.
+            if (_balanceRollup != null) _balanceRollup.SetValue(_game.Balance);
+            else if (_balanceLabel != null) _balanceLabel.text = $"{_game.Balance:N0}";
 
             var engine = _game.Engine;
             if (engine == null)
@@ -94,12 +203,23 @@ namespace BlackjackGame.UI.Screens
                 if (_playerHandView != null) _playerHandView.Clear();
                 if (_dealerHandLabel != null) _dealerHandLabel.text = "Dealer";
                 if (_playerHandLabel != null) _playerHandLabel.text = "Place your bet";
+                if (_betChip != null) _betChip.Hide();
+                RefreshBetControls();
                 ShowRow(_betRow, true);
                 ShowRow(_actionRow, false);
                 return;
             }
 
             RenderHands(engine);
+
+            // Keep the chip's number honest: doubling and splitting both change how much
+            // is actually at risk, so total it from the hands rather than the opening bet.
+            if (_betChip != null)
+            {
+                long staked = 0;
+                foreach (Hand h in engine.PlayerHands) staked += h.Bet;
+                if (staked > 0) _betChip.SetAmount(staked);
+            }
 
             bool playing = engine.Phase == RoundPhase.PlayerTurn;
             if (_hitButton != null) _hitButton.interactable = engine.CanHit;
@@ -110,6 +230,7 @@ namespace BlackjackGame.UI.Screens
 
             // Betting and playing are mutually exclusive, so the two control rows share
             // the same band on the rail — the mockup only ever shows one of them.
+            if (!playing) RefreshBetControls();
             ShowRow(_betRow, !playing);
             ShowRow(_actionRow, playing);
 
@@ -194,15 +315,53 @@ namespace BlackjackGame.UI.Screens
         {
             if (_outcomeLabel == null) return;
 
+            // Only react once per round. Refresh runs on every UI event, and replaying the
+            // slam and shake on each of them would strobe the screen.
+            bool firstTime = !_outcomeShown;
+            _outcomeShown = true;
+
             if (engine.PlayerHands.Count == 1)
             {
                 Hand hand = engine.PlayerHands[0];
-                _outcomeLabel.text =
-                    hand.IsBust ? "Bust" :
-                    engine.DealerHand.IsBust ? "Dealer busts - you win" :
-                    hand.IsBlackjack && !engine.DealerHand.IsBlackjack ? "Blackjack!" :
-                    hand.Value > engine.DealerHand.Value ? "You win" :
-                    hand.Value < engine.DealerHand.Value ? "Dealer wins" : "Push";
+
+                string text;
+                Color tint;
+                float shake;
+
+                if (hand.IsBust)
+                {
+                    text = "BUST"; tint = LoseColor; shake = 1f;
+                }
+                else if (engine.DealerHand.IsBust)
+                {
+                    text = "DEALER BUSTS — YOU WIN"; tint = WinColor; shake = 0.7f;
+                }
+                else if (hand.IsBlackjack && !engine.DealerHand.IsBlackjack)
+                {
+                    text = "BLACKJACK!"; tint = BlackjackColor; shake = 1.4f;
+                }
+                else if (hand.Value > engine.DealerHand.Value)
+                {
+                    text = "YOU WIN"; tint = WinColor; shake = 0.55f;
+                }
+                else if (hand.Value < engine.DealerHand.Value)
+                {
+                    text = "DEALER WINS"; tint = LoseColor; shake = 0.4f;
+                }
+                else
+                {
+                    text = "PUSH"; tint = PushColor; shake = 0f;
+                }
+
+                _outcomeLabel.text = text;
+                if (firstTime)
+                {
+                    PlayOutcomeReaction(tint, shake);
+                    // Stake comes back on anything that isn't an outright loss.
+                    bool keepsStake = !hand.IsBust && (engine.DealerHand.IsBust ||
+                                                       hand.Value >= engine.DealerHand.Value);
+                    if (_betChip != null) _betChip.Settle(keepsStake);
+                }
                 return;
             }
 
@@ -213,6 +372,22 @@ namespace BlackjackGame.UI.Screens
                 parts.Add($"H{i + 1} {(hand.IsBust ? "bust" : hand.Value.ToString())}");
             }
             _outcomeLabel.text = string.Join("   ", parts);
+            if (firstTime)
+            {
+                PlayOutcomeReaction(PushColor, 0.5f);
+                // Split hands can land either way; treat any surviving hand as keeping
+                // the stake so the chip's exit matches the balance moving up.
+                bool anySurvived = false;
+                foreach (Hand h in engine.PlayerHands)
+                    if (!h.IsBust) anySurvived = true;
+                if (_betChip != null) _betChip.Settle(anySurvived);
+            }
+        }
+
+        private void PlayOutcomeReaction(Color tint, float shakeStrength)
+        {
+            if (_outcomePunch != null) _outcomePunch.Play(tint, Mathf.Max(0.35f, shakeStrength));
+            if (_shake != null && shakeStrength > 0f) _shake.Shake(shakeStrength);
         }
 
         private void SetActionsInteractable(bool value)

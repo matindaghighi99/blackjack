@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BlackjackGame.Config;
 using BlackjackGame.Core;
@@ -33,6 +34,19 @@ namespace BlackjackGame.UI.Screens
         [Header("Navigation")]
         [SerializeField] private Button _backButton;
 
+        [Header("Quick Actions (top bar)")]
+        [SerializeField] private Button _giftButton;
+        [SerializeField] private Button _settingsButton;
+        [SerializeField] private Button _trophyButton;
+        [SerializeField] private SettingsPanel _settingsPanel;
+        [SerializeField] private StatsPanel _statsPanel;
+
+        [Header("Juice")]
+        [Tooltip("Rolls the balance up instead of snapping it — the payoff for a purchase.")]
+        [SerializeField] private CountRollup _balanceRollup;
+        [Tooltip("Slams the status line in on a completed purchase or reward claim.")]
+        [SerializeField] private LabelPunch _statusPunch;
+
         private StoreManager _store;
 
         private void Start()
@@ -40,6 +54,12 @@ namespace BlackjackGame.UI.Screens
             if (_backButton != null)
                 _backButton.onClick.AddListener(() =>
                     UnityEngine.SceneManagement.SceneManager.LoadScene(SceneNames.MainMenu));
+
+            if (_giftButton != null) _giftButton.onClick.AddListener(ClaimGift);
+            if (_settingsButton != null && _settingsPanel != null)
+                _settingsButton.onClick.AddListener(_settingsPanel.Show);
+            if (_trophyButton != null && _statsPanel != null)
+                _trophyButton.onClick.AddListener(_statsPanel.Show);
 
             if (!AppManager.Exists)
             {
@@ -107,6 +127,19 @@ namespace BlackjackGame.UI.Screens
             return best;
         }
 
+        /// <summary>Same claim flow as the Main Menu's daily-reward button, surfaced here
+        /// as a quick action.</summary>
+        private void ClaimGift()
+        {
+            if (!AppManager.Exists) return;
+
+            DailyRewardResult result = AppManager.Instance.Rewards.TryClaim(DateTime.UtcNow);
+            SetStatus(result.Success
+                ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
+                : $"Next reward in {result.TimeUntilNext.Hours}h {result.TimeUntilNext.Minutes}m");
+            RefreshBalance();
+        }
+
         private void Purchase(string packId)
         {
             SetStatus("Processing purchase…");
@@ -116,6 +149,12 @@ namespace BlackjackGame.UI.Screens
         private void HandlePurchaseCompleted(PurchaseResult result)
         {
             SetStatus(result.Message);
+            if (_statusPunch != null)
+            {
+                _statusPunch.Play(
+                    result.Success ? new Color(0.42f, 1f, 0.55f) : new Color(1f, 0.42f, 0.42f),
+                    result.Success ? 1f : 0.4f);
+            }
             RefreshBalance();
         }
 
@@ -123,8 +162,12 @@ namespace BlackjackGame.UI.Screens
 
         private void RefreshBalance()
         {
-            if (_balanceLabel != null && AppManager.Exists)
-                _balanceLabel.text = $"Balance: {AppManager.Instance.Chips.Balance:N0}";
+            if (!AppManager.Exists) return;
+
+            // The rollup owns the label's text when present, so don't write both.
+            if (_balanceRollup != null) _balanceRollup.SetValue(AppManager.Instance.Chips.Balance);
+            else if (_balanceLabel != null)
+                _balanceLabel.text = $"{AppManager.Instance.Chips.Balance:N0}";
         }
 
         private void SetStatus(string message)

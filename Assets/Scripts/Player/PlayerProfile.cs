@@ -62,5 +62,16 @@ namespace BlackjackGame.Player
             if (blackjack) Data.Blackjacks++;
             Save();
         }
+
+        /// <summary>
+        /// Wipes progress back to a fresh guest state — same player id, everything else
+        /// reset. Used by the Settings panel's "Reset Progress" action.
+        /// </summary>
+        public void ResetProgress(long startingChips)
+        {
+            string playerId = Data.PlayerId;
+            Data = new PlayerData(playerId, "Guest", startingChips);
+            Save();
+        }
     }
 }
