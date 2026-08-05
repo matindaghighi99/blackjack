@@ -78,6 +78,23 @@ namespace BlackjackGame.PlayTests
             Assert.Fail("Card animations did not settle within 600 frames.");
         }
 
+        /// <summary>
+        /// Waits for a rolling counter to reach its target. The balance label animates to
+        /// its new value, so reading it the frame a round settles catches it mid-roll.
+        /// </summary>
+        private static IEnumerator WaitForRollup(CountRollup rollup)
+        {
+            if (rollup == null) yield break;
+
+            for (int frame = 0; frame < 600; frame++)
+            {
+                if (!rollup.IsRolling) yield break;
+                yield return null;
+            }
+
+            Assert.Fail("Balance rollup did not settle within 600 frames.");
+        }
+
         /// <summary>Boots the app the way a player would, and guarantees a spendable balance.</summary>
         private static IEnumerator BootFromMainMenu()
         {
@@ -203,6 +220,7 @@ namespace BlackjackGame.PlayTests
             yield return WaitForCards(dealerCards, playerCards);
 
             var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
+            yield return WaitForRollup(balanceLabel.GetComponent<CountRollup>());
             Assert.IsTrue(long.TryParse(balanceLabel.text.Replace(",", ""), out long shownBalance),
                 $"Table balance label should be a plain number, was '{balanceLabel.text}'.");
             Assert.AreEqual(chips.Balance, shownBalance, "Balance label is out of sync.");
