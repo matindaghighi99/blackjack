@@ -1,0 +1,58 @@
+=== GIT FINAL COMMIT 2026-08-03 21:43:58.74 ===
+M  .gitignore
+M  Assets/Editor/SceneBootstrap.cs
+A  Assets/Prefabs/PackButton.prefab
+A  Assets/Prefabs/PackButton.prefab.meta
+A  Assets/Resources/BillingMode.json
+A  Assets/Resources/BillingMode.json.meta
+M  Assets/Scenes/Game.unity
+M  Assets/Scenes/MainMenu.unity
+M  Assets/Scenes/Store.unity
+M  Assets/Scripts/BlackjackGame.asmdef
+A  Assets/Settings.meta
+A  Assets/Settings/EconomyConfig.asset
+A  Assets/Settings/EconomyConfig.asset.meta
+A  Assets/Settings/GameConfig.asset
+A  Assets/Settings/GameConfig.asset.meta
+M  ProjectSettings/EditorBuildSettings.asset
+A  ProjectSettings/SceneTemplateSettings.json
+D  blackjack-social-casino.slnx
+[main e98d4c9] feat: wire up UI scenes + editor bootstrap
+ 18 files changed, 5391 insertions(+), 47 deletions(-)
+ create mode 100644 Assets/Prefabs/PackButton.prefab
+ create mode 100644 Assets/Prefabs/PackButton.prefab.meta
+ create mode 100644 Assets/Resources/BillingMode.json
+ create mode 100644 Assets/Resources/BillingMode.json.meta
+ create mode 100644 Assets/Settings.meta
+ create mode 100644 Assets/Settings/EconomyConfig.asset
+ create mode 100644 Assets/Settings/EconomyConfig.asset.meta
+ create mode 100644 Assets/Settings/GameConfig.asset
+ create mode 100644 Assets/Settings/GameConfig.asset.meta
+ create mode 100644 ProjectSettings/SceneTemplateSettings.json
+ delete mode 100644 blackjack-social-casino.slnx
+To https://github.com/matindaghighi99/blackjack.git
+   a4c45bf..e98d4c9  main -> main
+--- last 3 commits, full authorship ---
+commit e98d4c93ae8dfbab47b00722640f83f5f0d0b95c
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:43:59 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Mon Aug 3 21:43:59 2026 -0400
+
+    feat: wire up UI scenes + editor bootstrap
+
+commit a4c45bffb9f255420d6594e878f107b3e7811c96
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:35:34 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Mon Aug 3 21:35:34 2026 -0400
+
+    chore: add Unity-generated .meta files and ProjectSettings
+
+commit 65347f535c1d6748c01badf538f9c4d412402b07
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:25:23 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Mon Aug 3 21:25:23 2026 -0400
+
+    chore: add Unity-generated meta files

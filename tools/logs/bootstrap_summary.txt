@@ -1,0 +1,46 @@
+42:BlackjackGame.EditorTools.SceneBootstrap.BuildAllFromCommandLine
+305:[SceneBootstrap] Card library populated (52 faces + back).
+312:BlackjackGame.EditorTools.SceneBootstrap:PopulateCardLibrary () (at Assets/Editor/SceneBootstrap.cs:1440)
+313:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:194)
+314:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+316:(Filename: Assets/Editor/SceneBootstrap.cs Line: 1440)
+319:[SceneBootstrap] Built Assets/Prefabs/CardView.prefab
+326:BlackjackGame.EditorTools.SceneBootstrap:CreateCardPrefab () (at Assets/Editor/SceneBootstrap.cs:1461)
+327:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:195)
+328:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+330:(Filename: Assets/Editor/SceneBootstrap.cs Line: 1461)
+348:[SceneBootstrap] Built Assets/Scenes/MainMenu.unity
+355:BlackjackGame.EditorTools.SceneBootstrap:SaveScene (UnityEngine.SceneManagement.Scene,string) (at Assets/Editor/SceneBootstrap.cs:699)
+356:BlackjackGame.EditorTools.SceneBootstrap:BuildMainMenuScene () (at Assets/Editor/SceneBootstrap.cs:281)
+357:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:197)
+358:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+360:(Filename: Assets/Editor/SceneBootstrap.cs Line: 699)
+371:[SceneBootstrap] Built Assets/Scenes/Game.unity
+378:BlackjackGame.EditorTools.SceneBootstrap:SaveScene (UnityEngine.SceneManagement.Scene,string) (at Assets/Editor/SceneBootstrap.cs:699)
+379:BlackjackGame.EditorTools.SceneBootstrap:BuildGameScene () (at Assets/Editor/SceneBootstrap.cs:467)
+380:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:198)
+381:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+383:(Filename: Assets/Editor/SceneBootstrap.cs Line: 699)
+391:[SceneBootstrap] Built Assets/Prefabs/StorePackRow.prefab
+398:BlackjackGame.EditorTools.SceneBootstrap:CreatePackRowPrefab () (at Assets/Editor/SceneBootstrap.cs:1535)
+399:BlackjackGame.EditorTools.SceneBootstrap:BuildStoreScene () (at Assets/Editor/SceneBootstrap.cs:476)
+400:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:199)
+401:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+403:(Filename: Assets/Editor/SceneBootstrap.cs Line: 1535)
+409:[SceneBootstrap] Built Assets/Scenes/Store.unity
+416:BlackjackGame.EditorTools.SceneBootstrap:SaveScene (UnityEngine.SceneManagement.Scene,string) (at Assets/Editor/SceneBootstrap.cs:699)
+417:BlackjackGame.EditorTools.SceneBootstrap:BuildStoreScene () (at Assets/Editor/SceneBootstrap.cs:555)
+418:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:199)
+419:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+421:(Filename: Assets/Editor/SceneBootstrap.cs Line: 699)
+423:[SceneBootstrap] Build Settings: MainMenu, Game, Store.
+430:BlackjackGame.EditorTools.SceneBootstrap:RegisterBuildSettingsScenes () (at Assets/Editor/SceneBootstrap.cs:566)
+431:BlackjackGame.EditorTools.SceneBootstrap:BuildAll () (at Assets/Editor/SceneBootstrap.cs:201)
+432:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:129)
+434:(Filename: Assets/Editor/SceneBootstrap.cs Line: 566)
+473:[SceneBootstrap] SUCCESS — scenes built, wired and registered in Build Settings.
+480:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:140)
+482:(Filename: Assets/Editor/SceneBootstrap.cs Line: 140)
+493:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:141)
+506:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:141)
+519:BlackjackGame.EditorTools.SceneBootstrap:BuildAllFromCommandLine () (at Assets/Editor/SceneBootstrap.cs:141)

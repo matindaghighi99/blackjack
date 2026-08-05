@@ -1,0 +1,108 @@
+=== ART COMMIT 2026-08-04 18:38:12.15 ===
+--- git add ---
+warning: in the working copy of 'Assets/Editor/SceneBootstrap.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Prefabs/CardView.prefab', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scenes/Game.unity', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scenes/MainMenu.unity', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scenes/Store.unity', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scripts/UI/Components/HandView.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scripts/UI/Screens/StoreUI.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Settings/CardSpriteLibrary.asset', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Settings/Fonts/Body Bold SDF.asset', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Settings/Fonts/Body SDF.asset', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Settings/Fonts/Display SDF.asset', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Tests/PlayMode/SceneFlowTests.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'ProjectSettings/ProjectSettings.asset', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'art-source/extract_table_art.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/Table/MenuBackground.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/Table/StoreBackground.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/badge_best_value.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/btn_price.b34.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/chips_0.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/chips_1.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/chips_2.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/chips_3.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Art/UI/store_row.b40.png.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Prefabs/StorePackRow.prefab', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Prefabs/StorePackRow.prefab.meta', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scripts/UI/Components/StorePackRow.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'Assets/Scripts/UI/Components/StorePackRow.cs.meta', LF will be replaced by CRLF the next time Git touches it
+--- staged ---
+A  Assets/Art/Table/MenuBackground.png
+A  Assets/Art/Table/MenuBackground.png.meta
+A  Assets/Art/Table/StoreBackground.png
+A  Assets/Art/Table/StoreBackground.png.meta
+A  Assets/Art/UI/badge_best_value.png
+A  Assets/Art/UI/badge_best_value.png.meta
+A  Assets/Art/UI/btn_price.b34.png
+A  Assets/Art/UI/btn_price.b34.png.meta
+A  Assets/Art/UI/chips_0.png
+A  Assets/Art/UI/chips_0.png.meta
+A  Assets/Art/UI/chips_1.png
+A  Assets/Art/UI/chips_1.png.meta
+A  Assets/Art/UI/chips_2.png
+A  Assets/Art/UI/chips_2.png.meta
+A  Assets/Art/UI/chips_3.png
+A  Assets/Art/UI/chips_3.png.meta
+A  Assets/Art/UI/store_row.b40.png
+A  Assets/Art/UI/store_row.b40.png.meta
+M  Assets/Editor/SceneBootstrap.cs
+D  Assets/Prefabs/PackButton.prefab
+A  Assets/Prefabs/StorePackRow.prefab
+R  Assets/Prefabs/PackButton.prefab.meta -> Assets/Prefabs/StorePackRow.prefab.meta
+M  Assets/Scenes/Game.unity
+M  Assets/Scenes/MainMenu.unity
+M  Assets/Scenes/Store.unity
+M  Assets/Scripts/UI/Components/HandView.cs
+A  Assets/Scripts/UI/Components/StorePackRow.cs
+A  Assets/Scripts/UI/Components/StorePackRow.cs.meta
+M  Assets/Scripts/UI/Screens/StoreUI.cs
+M  "Assets/Settings/Fonts/Body Bold SDF.asset"
+M  "Assets/Settings/Fonts/Body SDF.asset"
+M  "Assets/Settings/Fonts/Display SDF.asset"
+M  Assets/Tests/PlayMode/SceneFlowTests.cs
+M  art-source/extract_table_art.py
+[main 3193b38] feat(ui): derive the menu and store from their concept renders too
+ 34 files changed, 27337 insertions(+), 8659 deletions(-)
+ create mode 100644 Assets/Art/Table/MenuBackground.png
+ create mode 100644 Assets/Art/Table/MenuBackground.png.meta
+ create mode 100644 Assets/Art/Table/StoreBackground.png
+ create mode 100644 Assets/Art/Table/StoreBackground.png.meta
+ create mode 100644 Assets/Art/UI/badge_best_value.png
+ create mode 100644 Assets/Art/UI/badge_best_value.png.meta
+ create mode 100644 Assets/Art/UI/btn_price.b34.png
+ create mode 100644 Assets/Art/UI/btn_price.b34.png.meta
+ create mode 100644 Assets/Art/UI/chips_0.png
+ create mode 100644 Assets/Art/UI/chips_0.png.meta
+ create mode 100644 Assets/Art/UI/chips_1.png
+ create mode 100644 Assets/Art/UI/chips_1.png.meta
+ create mode 100644 Assets/Art/UI/chips_2.png
+ create mode 100644 Assets/Art/UI/chips_2.png.meta
+ create mode 100644 Assets/Art/UI/chips_3.png
+ create mode 100644 Assets/Art/UI/chips_3.png.meta
+ create mode 100644 Assets/Art/UI/store_row.b40.png
+ create mode 100644 Assets/Art/UI/store_row.b40.png.meta
+ delete mode 100644 Assets/Prefabs/PackButton.prefab
+ create mode 100644 Assets/Prefabs/StorePackRow.prefab
+ rename Assets/Prefabs/{PackButton.prefab.meta => StorePackRow.prefab.meta} (74%)
+ create mode 100644 Assets/Scripts/UI/Components/StorePackRow.cs
+ create mode 100644 Assets/Scripts/UI/Components/StorePackRow.cs.meta
+To https://github.com/matindaghighi99/blackjack.git
+   9ed417c..3193b38  main -> main
+commit 3193b38e11597445a301043700f2f81677a66da4
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Tue Aug 4 18:38:14 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Tue Aug 4 18:38:14 2026 -0400
+
+    feat(ui): derive the menu and store from their concept renders too
+    
+    All three screens now come from docs/screenshots rather than being redrawn. The menu keeps its painted crest, wordmark, tagline, house rules and corner props; the store keeps GET CHIPS, TAP TO PURCHASE and its corner chip stacks. Only the genuinely dynamic parts - top bars, buttons and pack rows - are rebuilt live and positioned in the renders own pixel coordinates.
+    
+    Store rows are a real component now. StorePackRow carries artwork, amount, bonus, price pill and a BEST VALUE ribbon, replacing the single label that packed everything into one string and overflowed its button at both ends. The badge is derived from the best bonus-per-chip ratio in EconomyConfig rather than hard-coded to a row, so it follows the data if the packs are retuned.
+    
+    Row frame, price pill, four chip stacks and the ribbon are all lifted from the store render; the chip art is keyed off the felt by sampling the background from a corner rather than assuming a colour, since the rows sit on slightly different greens.
+    
+    Two animation bugs fixed on the way. Cards hidden mid-deal kept Travel below 1 forever because Update skips inactive objects, which left IsAnimating stuck true and hung the play-mode test against its frame budget. And Render restarted an in-progress flip on every Refresh; it now ignores a flip already heading for the same face.
+    
+    The test was also caching StandButton across a state change - hitting can bust the hand, which settles the round and hides the action row - so it now resolves the button inside the loop while the phase is known.

@@ -1,0 +1,11 @@
+=== DIAG 2026-08-04  9:22:52.14 ===
+--- core.autocrlf (with origin) ---
+file:C:/Program Files/Git/etc/gitconfig	true
+--- core.eol ---
+--- status as Windows git sees it ---
+--- END STATUS ---
+--- diff stat ---
+--- END ---
+--- branches ---
+  backup-before-reword fb54e56 feat(ui): render hands as card sprites on a felt table
+* main                 fb54e56 feat(ui): render hands as card sprites on a felt table

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="5" result="Passed" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.0539278">
+  <test-suite type="TestSuite" id="1000" name="blackjack-social-casino" fullname="blackjack-social-casino" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.053928" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1007" name="BlackjackGame.Tests.dll" fullname="C:/Users/mobin/Desktop/Project-folder/blackjack-social-casino/Library/ScriptAssemblies/BlackjackGame.Tests.dll" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.045550" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="9680" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1008" name="BlackjackGame" fullname="BlackjackGame" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.045112" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1009" name="Tests" fullname="BlackjackGame.Tests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.044886" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestFixture" id="1001" name="HandEvaluatorTests" fullname="BlackjackGame.Tests.HandEvaluatorTests" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.043854" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1002" name="AceAndKing_IsBlackjack_ValuedAt21" fullname="BlackjackGame.Tests.HandEvaluatorTests.AceAndKing_IsBlackjack_ValuedAt21" methodname="AceAndKing_IsBlackjack_ValuedAt21" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" seed="1546115094" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.023588" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1006" name="Deck_DrawsAll52UniqueCards_ForSingleDeck" fullname="BlackjackGame.Tests.HandEvaluatorTests.Deck_DrawsAll52UniqueCards_ForSingleDeck" methodname="Deck_DrawsAll52UniqueCards_ForSingleDeck" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" seed="764762677" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.002165" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1003" name="MultipleAces_DemoteToAvoidBust" fullname="BlackjackGame.Tests.HandEvaluatorTests.MultipleAces_DemoteToAvoidBust" methodname="MultipleAces_DemoteToAvoidBust" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" seed="48483609" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.000290" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1004" name="SoftBecomesHard_WhenAceMustDemote" fullname="BlackjackGame.Tests.HandEvaluatorTests.SoftBecomesHard_WhenAceMustDemote" methodname="SoftBecomesHard_WhenAceMustDemote" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" seed="677374411" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.000443" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1005" name="ThreeCardTwentyOne_IsNotBlackjack" fullname="BlackjackGame.Tests.HandEvaluatorTests.ThreeCardTwentyOne_IsNotBlackjack" methodname="ThreeCardTwentyOne_IsNotBlackjack" classname="BlackjackGame.Tests.HandEvaluatorTests" runstate="Runnable" seed="2067546666" result="Passed" start-time="2026-08-05 16:33:28Z" end-time="2026-08-05 16:33:28Z" duration="0.000242" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[Saving results to: C:\Users\mobin\Desktop\Project-folder\blackjack-social-casino\tools\logs\results_editmode.xml
+]]></output>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

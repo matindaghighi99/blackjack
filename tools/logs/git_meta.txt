@@ -1,0 +1,179 @@
+=== GIT META COMMIT 2026-08-03 21:35:33.85 ===
+A  Assets/Editor.meta
+A  Assets/Editor/SceneBootstrap.cs.meta
+A  Assets/Prefabs.meta
+A  Assets/Resources.meta
+A  Assets/Scenes.meta
+A  Assets/Scenes/Game.unity.meta
+A  Assets/Scenes/MainMenu.unity.meta
+A  Assets/Scenes/Store.unity.meta
+A  Assets/Scripts.meta
+A  Assets/Scripts/Blackjack.meta
+A  Assets/Scripts/Blackjack/BlackjackEngine.cs.meta
+A  Assets/Scripts/Blackjack/Cards.meta
+A  Assets/Scripts/Blackjack/Cards/Card.cs.meta
+A  Assets/Scripts/Blackjack/Cards/Deck.cs.meta
+A  Assets/Scripts/Blackjack/Cards/Hand.cs.meta
+A  Assets/Scripts/Blackjack/DealerAI.cs.meta
+A  Assets/Scripts/Blackjack/HandEvaluator.cs.meta
+A  Assets/Scripts/Blackjack/Rules.meta
+A  Assets/Scripts/Blackjack/Rules/ClassicRules.cs.meta
+A  Assets/Scripts/Blackjack/Rules/EuropeanRules.cs.meta
+A  Assets/Scripts/Blackjack/Rules/IRuleSet.cs.meta
+M  Assets/Scripts/BlackjackGame.asmdef
+A  Assets/Scripts/BlackjackGame.asmdef.meta
+A  Assets/Scripts/Config.meta
+A  Assets/Scripts/Config/EconomyConfig.cs.meta
+A  Assets/Scripts/Config/GameConfig.cs.meta
+A  Assets/Scripts/Core.meta
+A  Assets/Scripts/Core/AppManager.cs.meta
+A  Assets/Scripts/Core/GameManager.cs.meta
+A  Assets/Scripts/Economy.meta
+A  Assets/Scripts/Economy/ChipManager.cs.meta
+A  Assets/Scripts/Economy/IAP.meta
+A  Assets/Scripts/Economy/IAP/BackendReceiptValidator.cs.meta
+A  Assets/Scripts/Economy/IAP/IPurchaseService.cs.meta
+A  Assets/Scripts/Economy/IAP/IReceiptValidator.cs.meta
+A  Assets/Scripts/Economy/IAP/LocalReceiptValidator.cs.meta
+A  Assets/Scripts/Economy/IAP/MockPurchaseService.cs.meta
+M  Assets/Scripts/Economy/IAP/UnityIapService.cs
+A  Assets/Scripts/Economy/IAP/UnityIapService.cs.meta
+A  Assets/Scripts/Economy/RewardSystem.cs.meta
+A  Assets/Scripts/Economy/StoreManager.cs.meta
+A  Assets/Scripts/Player.meta
+A  Assets/Scripts/Player/PlayerData.cs.meta
+A  Assets/Scripts/Player/PlayerProfile.cs.meta
+A  Assets/Scripts/UI.meta
+A  Assets/Scripts/UI/Components.meta
+A  Assets/Scripts/UI/Components/ChipBalanceView.cs.meta
+A  Assets/Scripts/UI/Screens.meta
+A  Assets/Scripts/UI/Screens/GameTableUI.cs.meta
+A  Assets/Scripts/UI/Screens/MainMenuUI.cs.meta
+A  Assets/Scripts/UI/Screens/StoreUI.cs.meta
+A  Assets/Scripts/Utils.meta
+A  Assets/Scripts/Utils/IRandomProvider.cs.meta
+A  Assets/Scripts/Utils/MonoSingleton.cs.meta
+A  Assets/Scripts/Utils/UnityWebRequestAwaiter.cs.meta
+A  Assets/Tests.meta
+A  Assets/Tests/EditMode.meta
+A  Assets/Tests/EditMode/BlackjackGame.Tests.asmdef.meta
+A  Assets/Tests/EditMode/HandEvaluatorTests.cs.meta
+A  Assets/Tests/PlayMode.meta
+A  Assets/Tests/PlayMode/BlackjackGame.PlayTests.asmdef.meta
+A  Assets/Tests/PlayMode/SceneFlowTests.cs.meta
+M  Packages/manifest.json
+A  Packages/packages-lock.json
+A  ProjectSettings/AudioManager.asset
+A  ProjectSettings/ClusterInputManager.asset
+A  ProjectSettings/DynamicsManager.asset
+A  ProjectSettings/EditorBuildSettings.asset
+A  ProjectSettings/EditorSettings.asset
+A  ProjectSettings/GraphicsSettings.asset
+A  ProjectSettings/InputManager.asset
+A  ProjectSettings/MemorySettings.asset
+A  ProjectSettings/MultiplayerManager.asset
+A  ProjectSettings/NavMeshAreas.asset
+A  ProjectSettings/Physics2DSettings.asset
+A  ProjectSettings/PresetManager.asset
+A  ProjectSettings/ProjectSettings.asset
+M  ProjectSettings/ProjectVersion.txt
+A  ProjectSettings/QualitySettings.asset
+A  ProjectSettings/TagManager.asset
+A  ProjectSettings/TimeManager.asset
+A  ProjectSettings/UnityConnectSettings.asset
+A  ProjectSettings/VFXManager.asset
+A  ProjectSettings/VersionControlSettings.asset
+A  blackjack-social-casino.slnx
+[main a4c45bf] chore: add Unity-generated .meta files and ProjectSettings
+ 85 files changed, 2550 insertions(+), 11 deletions(-)
+ create mode 100644 Assets/Editor.meta
+ create mode 100644 Assets/Editor/SceneBootstrap.cs.meta
+ create mode 100644 Assets/Prefabs.meta
+ create mode 100644 Assets/Resources.meta
+ create mode 100644 Assets/Scenes.meta
+ create mode 100644 Assets/Scenes/Game.unity.meta
+ create mode 100644 Assets/Scenes/MainMenu.unity.meta
+ create mode 100644 Assets/Scenes/Store.unity.meta
+ create mode 100644 Assets/Scripts.meta
+ create mode 100644 Assets/Scripts/Blackjack.meta
+ create mode 100644 Assets/Scripts/Blackjack/BlackjackEngine.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Cards.meta
+ create mode 100644 Assets/Scripts/Blackjack/Cards/Card.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Cards/Deck.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Cards/Hand.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/DealerAI.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/HandEvaluator.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Rules.meta
+ create mode 100644 Assets/Scripts/Blackjack/Rules/ClassicRules.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Rules/EuropeanRules.cs.meta
+ create mode 100644 Assets/Scripts/Blackjack/Rules/IRuleSet.cs.meta
+ create mode 100644 Assets/Scripts/BlackjackGame.asmdef.meta
+ create mode 100644 Assets/Scripts/Config.meta
+ create mode 100644 Assets/Scripts/Config/EconomyConfig.cs.meta
+ create mode 100644 Assets/Scripts/Config/GameConfig.cs.meta
+ create mode 100644 Assets/Scripts/Core.meta
+ create mode 100644 Assets/Scripts/Core/AppManager.cs.meta
+ create mode 100644 Assets/Scripts/Core/GameManager.cs.meta
+ create mode 100644 Assets/Scripts/Economy.meta
+ create mode 100644 Assets/Scripts/Economy/ChipManager.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/BackendReceiptValidator.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/IPurchaseService.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/IReceiptValidator.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/LocalReceiptValidator.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/MockPurchaseService.cs.meta
+ create mode 100644 Assets/Scripts/Economy/IAP/UnityIapService.cs.meta
+ create mode 100644 Assets/Scripts/Economy/RewardSystem.cs.meta
+ create mode 100644 Assets/Scripts/Economy/StoreManager.cs.meta
+ create mode 100644 Assets/Scripts/Player.meta
+ create mode 100644 Assets/Scripts/Player/PlayerData.cs.meta
+ create mode 100644 Assets/Scripts/Player/PlayerProfile.cs.meta
+ create mode 100644 Assets/Scripts/UI.meta
+ create mode 100644 Assets/Scripts/UI/Components.meta
+ create mode 100644 Assets/Scripts/UI/Components/ChipBalanceView.cs.meta
+ create mode 100644 Assets/Scripts/UI/Screens.meta
+ create mode 100644 Assets/Scripts/UI/Screens/GameTableUI.cs.meta
+ create mode 100644 Assets/Scripts/UI/Screens/MainMenuUI.cs.meta
+ create mode 100644 Assets/Scripts/UI/Screens/StoreUI.cs.meta
+ create mode 100644 Assets/Scripts/Utils.meta
+ create mode 100644 Assets/Scripts/Utils/IRandomProvider.cs.meta
+ create mode 100644 Assets/Scripts/Utils/MonoSingleton.cs.meta
+ create mode 100644 Assets/Scripts/Utils/UnityWebRequestAwaiter.cs.meta
+ create mode 100644 Assets/Tests.meta
+ create mode 100644 Assets/Tests/EditMode.meta
+ create mode 100644 Assets/Tests/EditMode/BlackjackGame.Tests.asmdef.meta
+ create mode 100644 Assets/Tests/EditMode/HandEvaluatorTests.cs.meta
+ create mode 100644 Assets/Tests/PlayMode.meta
+ create mode 100644 Assets/Tests/PlayMode/BlackjackGame.PlayTests.asmdef.meta
+ create mode 100644 Assets/Tests/PlayMode/SceneFlowTests.cs.meta
+ create mode 100644 Packages/packages-lock.json
+ create mode 100644 ProjectSettings/AudioManager.asset
+ create mode 100644 ProjectSettings/ClusterInputManager.asset
+ create mode 100644 ProjectSettings/DynamicsManager.asset
+ create mode 100644 ProjectSettings/EditorBuildSettings.asset
+ create mode 100644 ProjectSettings/EditorSettings.asset
+ create mode 100644 ProjectSettings/GraphicsSettings.asset
+ create mode 100644 ProjectSettings/InputManager.asset
+ create mode 100644 ProjectSettings/MemorySettings.asset
+ create mode 100644 ProjectSettings/MultiplayerManager.asset
+ create mode 100644 ProjectSettings/NavMeshAreas.asset
+ create mode 100644 ProjectSettings/Physics2DSettings.asset
+ create mode 100644 ProjectSettings/PresetManager.asset
+ create mode 100644 ProjectSettings/ProjectSettings.asset
+ create mode 100644 ProjectSettings/QualitySettings.asset
+ create mode 100644 ProjectSettings/TagManager.asset
+ create mode 100644 ProjectSettings/TimeManager.asset
+ create mode 100644 ProjectSettings/UnityConnectSettings.asset
+ create mode 100644 ProjectSettings/VFXManager.asset
+ create mode 100644 ProjectSettings/VersionControlSettings.asset
+ create mode 100644 blackjack-social-casino.slnx
+To https://github.com/matindaghighi99/blackjack.git
+   65347f5..a4c45bf  main -> main
+--- resulting commit ---
+commit a4c45bffb9f255420d6594e878f107b3e7811c96
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:35:34 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Mon Aug 3 21:35:34 2026 -0400
+
+    chore: add Unity-generated .meta files and ProjectSettings

@@ -1,0 +1,60 @@
+=== REWORD 65347f5 2026-08-04  9:23:23.43 ===
+Original author date: 2026-08-03T21:25:23-04:00
+--- checkout detached ---
+HEAD is now at 65347f5 chore: add Unity-generated meta files
+--- amend message ---
+[detached HEAD 478310b] fix(iap): resolve UnityIapService compile errors, add editor bootstrap
+ Date: Mon Aug 3 21:25:23 2026 -0400
+ 6 files changed, 955 insertions(+), 19 deletions(-)
+ create mode 100644 Assets/Editor/SceneBootstrap.cs
+ create mode 100644 Assets/Tests/PlayMode/BlackjackGame.PlayTests.asmdef
+ create mode 100644 Assets/Tests/PlayMode/SceneFlowTests.cs
+Removing regenerated untracked blackjack-social-casino.slnx
+--- replay later commits ---
+Rebasing (1/3)Rebasing (2/3)Rebasing (3/3)Successfully rebased and updated refs/heads/main.
+--- force-push with lease ---
+To https://github.com/matindaghighi99/blackjack.git
+ + fb54e56...6cb5c55 main -> main (forced update)
+commit 6cb5c5548202097e60923a6958070846b202b3cf
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Tue Aug 4 09:14:20 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Tue Aug 4 09:23:26 2026 -0400
+
+    feat(ui): render hands as card sprites on a felt table
+    
+    Adds a procedural art generator (art-source/generate_card_art.py) that draws all 52 faces, the card back and the table felt as vector shapes, so the art is reproducible from source at any resolution and carries no third-party licensing.
+    
+    CardSpriteLibrary maps a Card to its sprite by suit/rank index; HandView lays hands out as pooled, fanned card images and reuses them between rounds instead of destroying GameObjects.
+    
+    Fixes an information leak: the dealer's hole card was face up for the whole round and the label printed the dealer's full total during the player's turn. The hole card now stays face down until the dealer plays and the label shows only the visible total.
+    
+    ArtImportSettings forces Assets/Art to import as sprites - this is not a 2D project, so the PNGs would otherwise import as plain textures and the library would silently come up empty.
+
+commit 4975865503fdaf15f62aa0edb62589ad2421f417
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:43:59 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Tue Aug 4 09:23:26 2026 -0400
+
+    feat: wire up UI scenes + editor bootstrap
+
+commit 61a69c20a58f60e38219faaba73dd83bfc9af42a
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:35:34 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Tue Aug 4 09:23:26 2026 -0400
+
+    chore: add Unity-generated .meta files and ProjectSettings
+
+commit 478310b1b7fb7885aef200cb145fc86bb11d98cb
+Author:     Matin Daghighi <matindaghighi99@gmail.com>
+AuthorDate: Mon Aug 3 21:25:23 2026 -0400
+Commit:     Matin Daghighi <matindaghighi99@gmail.com>
+CommitDate: Tue Aug 4 09:23:25 2026 -0400
+
+    fix(iap): resolve UnityIapService compile errors, add editor bootstrap
+    
+    Implement the Unity IAP listener callbacks explicitly so they stop colliding with the IPurchaseService events of the same name (CS0102), and add the missing UnityEngine.UI assembly reference so the UI screens compile.
+    
+    Also adds the SceneBootstrap editor tool and the play-mode scene tests. Contains no .meta files, despite what the original commit message claimed.

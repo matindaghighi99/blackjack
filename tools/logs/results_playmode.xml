@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="3" result="Failed(Child)" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.0588992">
+  <test-suite type="TestSuite" id="1009" name="blackjack-social-casino" fullname="blackjack-social-casino" runstate="Runnable" testcasecount="3" result="Failed" site="Child" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.058899" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <failure>
+      <message><![CDATA[One or more child tests had errors]]></message>
+    </failure>
+    <test-suite type="Assembly" id="1005" name="BlackjackGame.PlayTests.dll" fullname="C:/Users/mobin/Desktop/Project-folder/blackjack-social-casino/Library/ScriptAssemblies/BlackjackGame.PlayTests.dll" runstate="Runnable" testcasecount="3" result="Failed" site="Child" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.040146" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="7356" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <failure>
+        <message><![CDATA[One or more child tests had errors]]></message>
+      </failure>
+      <test-suite type="TestSuite" id="1006" name="BlackjackGame" fullname="BlackjackGame" runstate="Runnable" testcasecount="3" result="Failed" site="Child" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.037919" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <failure>
+          <message><![CDATA[One or more child tests had errors]]></message>
+        </failure>
+        <test-suite type="TestSuite" id="1007" name="PlayTests" fullname="BlackjackGame.PlayTests" runstate="Runnable" testcasecount="3" result="Failed" site="Child" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.037061" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <failure>
+            <message><![CDATA[One or more child tests had errors]]></message>
+          </failure>
+          <test-suite type="TestFixture" id="1001" name="SceneFlowTests" fullname="BlackjackGame.PlayTests.SceneFlowTests" classname="BlackjackGame.PlayTests.SceneFlowTests" runstate="Runnable" testcasecount="3" result="Failed" site="Child" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="3.034300" total="3" passed="2" failed="1" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <failure>
+              <message><![CDATA[One or more child tests had errors]]></message>
+            </failure>
+            <test-case id="1003" name="GameScene_DealHitStand_MovesChipBalance" fullname="BlackjackGame.PlayTests.SceneFlowTests.GameScene_DealHitStand_MovesChipBalance" methodname="GameScene_DealHitStand_MovesChipBalance" classname="BlackjackGame.PlayTests.SceneFlowTests" runstate="Runnable" seed="318186001" result="Failed" start-time="2026-08-05 16:33:44Z" end-time="2026-08-05 16:33:47Z" duration="2.516213" asserts="0">
+              <properties>
+                <property name="_JOINTYPE" value="UnityCombinatorial" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <failure>
+                <message><![CDATA[Card animations did not settle within 600 frames.]]></message>
+                <stack-trace><![CDATA[at BlackjackGame.PlayTests.SceneFlowTests+<WaitForCards>d__4.MoveNext () [0x0008a] in C:\Users\mobin\Desktop\Project-folder\blackjack-social-casino\Assets\Tests\PlayMode\SceneFlowTests.cs:78
+at UnityEngine.TestTools.TestEnumerator+<Execute>d__7.MoveNext () [0x0003a] in .\Library\PackageCache\com.unity.test-framework@bd7f943e9647\UnityEngine.TestRunner\NUnitExtensions\Attributes\TestEnumerator.cs:44
+]]></stack-trace>
+              </failure>
+              <output><![CDATA[[MockPurchaseService] Initialized with 4 products (no real billing).
+[AppManager] Booted. Player Guest with 392,500 chips.
+]]></output>
+            </test-case>
+            <test-case id="1002" name="MainMenu_BootsAppManagerAndShowsBalance" fullname="BlackjackGame.PlayTests.SceneFlowTests.MainMenu_BootsAppManagerAndShowsBalance" methodname="MainMenu_BootsAppManagerAndShowsBalance" classname="BlackjackGame.PlayTests.SceneFlowTests" runstate="Runnable" seed="1731905366" result="Passed" start-time="2026-08-05 16:33:47Z" end-time="2026-08-05 16:33:47Z" duration="0.138044" asserts="0">
+              <properties>
+                <property name="_JOINTYPE" value="UnityCombinatorial" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1004" name="StoreScene_ListsPacks_AndMockPurchaseGrantsChips" fullname="BlackjackGame.PlayTests.SceneFlowTests.StoreScene_ListsPacks_AndMockPurchaseGrantsChips" methodname="StoreScene_ListsPacks_AndMockPurchaseGrantsChips" classname="BlackjackGame.PlayTests.SceneFlowTests" runstate="Runnable" seed="942768357" result="Passed" start-time="2026-08-05 16:33:47Z" end-time="2026-08-05 16:33:47Z" duration="0.344889" asserts="0">
+              <properties>
+                <property name="_JOINTYPE" value="UnityCombinatorial" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[[MockPurchaseService] Simulating successful purchase of 'pack_small'.
+Saving results to: C:\Users\mobin\Desktop\Project-folder\blackjack-social-casino\tools\logs\results_playmode.xml
+]]></output>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

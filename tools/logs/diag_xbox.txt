@@ -1,0 +1,68 @@
+=== XBOX DIAG 2026-08-04  9:28:20.47 ===
+
+--- Xbox / GameBar processes running now ---
+INFO: No tasks are running which match the specified criteria.
+INFO: No tasks are running which match the specified criteria.
+INFO: No tasks are running which match the specified criteria.
+INFO: No tasks are running which match the specified criteria.
+INFO: No tasks are running which match the specified criteria.
+INFO: No tasks are running which match the specified criteria.
+
+--- all processes with 'xbox' or 'game' in the name ---
+
+ProcessName          Id StartTime            
+-----------          -- ---------            
+gamingservices     3092                      
+gamingservicesnet 11744                      
+XboxPcAppFT        1188 2026-08-04 9:01:46 AM
+XboxPcTray        26688 2026-08-04 9:01:46 AM
+
+
+
+
+--- Game Bar / GameDVR settings (0 = off, 1 = on) ---
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\GameDVR
+    KGLToGCSUpdatedRevision    REG_DWORD    0xa83
+    KGLRevision    REG_DWORD    0xa83
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\GameDVR\Debug
+
+HKEY_CURRENT_USER\System\GameConfigStore
+    GameDVR_Enabled    REG_DWORD    0x1
+
+
+HKEY_CURRENT_USER\Software\Microsoft\GameBar
+    GamepadDoublePressIntervalMs    REG_DWORD    0x1
+
+
+--- startup entries (Run keys) ---
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+    OneDrive    REG_SZ    "C:\Users\mobin\AppData\Local\Microsoft\OneDrive\OneDrive.exe" /background
+    Adobe Acrobat Synchronizer    REG_SZ    "C:\Program Files\Adobe\Acrobat DC\Acrobat\AdobeCollabSync.exe"
+    Teams    REG_SZ    "C:\Users\mobin\AppData\Local\Microsoft\WindowsApps\MSTeams_8wekyb3d8bbwe\ms-teams.exe" msteams:system-initiated
+    AVGBrowserAutoLaunch_1A6888D843A1EAC7536A4FB067858B55    REG_SZ    "C:\Program Files\AVG\Browser\Application\AVGBrowser.exe" --check-run=src=logon --auto-launch-at-startup --profile-directory="Default"
+    electron.app.BlueStacks Services    REG_SZ    C:\Users\mobin\AppData\Local\Programs\bluestacks-services\BlueStacksServices.exe --hidden
+    EpicGamesLauncher    REG_SZ    "C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe" -silent -launchcontext=boot
+    MicrosoftEdgeAutoLaunch_2684A73125D3FDA0826BC489BD896A9D    REG_SZ    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --win-session-start
+    GoogleChromeAutoLaunch_D6DD276DF39CCBE4D70B9ABAAFD9F294    REG_SZ    "C:\Program Files\Google\Chrome\Application\chrome.exe" --no-startup-window /prefetch:5
+
+
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run
+    SecurityHealth    REG_EXPAND_SZ    %windir%\system32\SecurityHealthSystray.exe
+    RtkAudUService    REG_SZ    "C:\WINDOWS\System32\DriverStore\FileRepository\realtekservice.inf_amd64_3cf99e411755df38\RtkAudUService64.exe" -background
+    NortonUI.exe    REG_SZ    "C:\Program Files\Norton\Suite\AvLaunch.exe" /gui
+    GlobalProtect    REG_SZ    "C:\Program Files\Palo Alto Networks\GlobalProtect\PanGPA.exe"
+
+
+--- scheduled tasks mentioning Xbox ---
+
+TaskName        TaskPath                State
+--------        --------                -----
+XblGameSaveTask \Microsoft\XblGameSave\ Ready
+
+
+
+
+--- has Windows flagged Unity.exe as a game? ---
