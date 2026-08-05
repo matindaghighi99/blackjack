@@ -24,7 +24,9 @@ Output:
 
 import colorsys
 import os
+from collections import deque
 
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,17 +46,22 @@ DYNAMIC = [
     (326, 186, 710, 424),    # dealer's two cards (+ drop shadows)
     (272, 636, 686, 1020),   # player's two cards (+ drop shadows)
     (642, 796, 858, 972),    # bet chip stack
-    # The four action buttons, individually — inpainting the whole strip flattened the
-    # rail's texture and wiped the gold arc running behind it.
-    (42, 1094, 252, 1264),
-    (274, 1094, 493, 1264),
-    (515, 1094, 733, 1264),
-    (759, 1094, 972, 1264),
     # Top bar. The render bakes in a "5,000" balance and three icon buttons; those have
     # to be live, so they're painted out and rebuilt from sprites.
     (20, 20, 440, 120),
     (676, 22, 980, 120),
 ]
+
+# The action-button strip is repaired separately — see inpaint_rail_strip. Diffusion was
+# tried here first and left four glowing rectangles: the boundary ring it samples from is
+# each button's own gold border, so the fill converged on gold rather than dark leather,
+# and the boxes stopped above the buttons' bottom rims, which survived underneath.
+RAIL_BAND = (1086, 1300)
+# Vertical strips of rail with no button on them: the two outer margins and the three
+# gaps between buttons. These are the only honest samples of what the rail looks like.
+RAIL_CLEAN = [(0, 40), (256, 282), (486, 512), (736, 758), (972, 1023)]
+RAIL_FILL = (26, 996)        # x range replaced; outside it the rail is left untouched
+RAIL_FEATHER = 26
 
 # The STAND button, used as the template for the live action buttons.
 BUTTON_TEMPLATE = (277, 1097, 490, 1261)
@@ -135,9 +142,62 @@ def add_grain(img, boxes, sigma=2.6, pad=12):
     return img
 
 
+def inpaint_rail_strip(img):
+    """
+    Rebuilds the leather rail across the action-button strip.
+
+    The rail is close to horizontally uniform apart from a vignette toward each edge, so
+    for every row the clean strips either side of the buttons are sampled and a quadratic
+    is fitted across x. That reproduces the vignette without creases — piecewise-linear
+    interpolation leaves a visible crease at every sample point — and, because each row is
+    solved independently, the rail's vertical shading survives intact.
+
+    Only the horizontal span the buttons occupy is replaced, feathered at both ends, so
+    the gold arc above the strip and the medallion below are untouched.
+    """
+    arr = np.array(img).astype(float)
+    y0, y1 = RAIL_BAND
+    fx0, fx1 = RAIL_FILL
+    width = arr.shape[1]
+
+    xs = np.arange(width)
+    centres = np.array([(s + e) / 2 for s, e in RAIL_CLEAN])
+
+    # Blend weight: 1 across the fill span, ramping to 0 over the feather at each end.
+    weight = np.zeros(width)
+    weight[fx0:fx1] = 1.0
+    for i in range(RAIL_FEATHER):
+        t = i / RAIL_FEATHER
+        weight[fx0 + i] = t
+        weight[fx1 - 1 - i] = t
+    weight = weight[:, None]
+
+    for y in range(y0, y1):
+        row = arr[y]
+        samples = np.array([np.median(row[s:e], axis=0) for s, e in RAIL_CLEAN])
+        fit = np.stack(
+            [np.polyval(np.polyfit(centres, samples[:, c], 2), xs) for c in range(3)],
+            axis=1)
+        arr[y] = row * (1 - weight) + fit * weight
+
+    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB")
+
+    # Soften the two horizontal seams at the band's top and bottom edges.
+    patch = out.crop((0, y0 - 8, width, y1 + 8)).filter(ImageFilter.GaussianBlur(1.0))
+    out.paste(patch, (0, y0 - 8))
+
+    # Matched grain, or the smooth fit reads as plastic against the leather around it.
+    arr = np.array(out).astype(float)
+    rng = np.random.default_rng(23)
+    arr[y0 - 8:y1 + 8] = np.clip(
+        arr[y0 - 8:y1 + 8] + rng.normal(0, 2.5, (y1 - y0 + 16, width, 1)), 0, 255)
+    return Image.fromarray(arr.astype(np.uint8), "RGB")
+
+
 def build_background(src):
     plate = inpaint_diffuse(src.copy(), DYNAMIC)
     plate = add_grain(plate, DYNAMIC)
+    plate = inpaint_rail_strip(plate)
 
     # Scale to the game's width, then extend vertically: the render is 2:3 but the game
     # is 9:16, so ~300 rows are missing. Replicate the top and bottom edges rather than
@@ -237,6 +297,114 @@ def key_out_background(img, sample_box, tolerance=52, feather=1.4):
 
     alpha = alpha.filter(ImageFilter.GaussianBlur(feather))
     img.putalpha(alpha)
+    return img
+
+
+def key_out_border(img, tolerance=64, feather=1.2):
+    """
+    Clears the background that SURROUNDS a lifted element, leaving anything enclosed by
+    it intact.
+
+    A plain colour-distance key (key_out_background above) also punches holes wherever
+    the subject happens to match the backdrop — on the bet chip that eats the dark green
+    inlay between its gold edge spots. Flood-filling inward from the border instead means
+    only pixels actually connected to the outside are removed, so interior detail is safe
+    no matter what colour it is.
+    """
+    img = img.convert("RGBA")
+    arr = np.array(img).astype(int)
+    h, w, _ = arr.shape
+    rgb = arr[:, :, :3]
+
+    # Average all four corners: the surround is felt, which is lit unevenly across a crop.
+    corners = [rgb[0:5, 0:5], rgb[0:5, w - 5:w], rgb[h - 5:h, 0:5], rgb[h - 5:h, w - 5:w]]
+    bg = np.concatenate([c.reshape(-1, 3) for c in corners]).mean(0)
+    similar = np.abs(rgb - bg).sum(2) < tolerance
+
+    visited = np.zeros((h, w), bool)
+    queue = deque()
+
+    def push(y, x):
+        if similar[y, x] and not visited[y, x]:
+            visited[y, x] = True
+            queue.append((y, x))
+
+    for x in range(w):
+        push(0, x)
+        push(h - 1, x)
+    for y in range(h):
+        push(y, 0)
+        push(y, w - 1)
+
+    while queue:
+        y, x = queue.popleft()
+        if y > 0: push(y - 1, x)
+        if y < h - 1: push(y + 1, x)
+        if x > 0: push(y, x - 1)
+        if x < w - 1: push(y, x + 1)
+
+    alpha = Image.fromarray(np.where(visited, 0, 255).astype(np.uint8), "L")
+    img.putalpha(alpha.filter(ImageFilter.GaussianBlur(feather)))
+    return img
+
+
+def blank_chip_denomination(img):
+    """
+    Paints the render's baked-in "100" off the chip face.
+
+    The bet is whatever the player typed, so a chip that permanently reads 100 is simply
+    wrong at any other stake. Following the same principle as the background plate —
+    dynamic content is painted out and re-composited live — the face is filled with its
+    own dark green and Unity draws the real number on top.
+
+    The fill is a radial blend between the colour at the face's centre and its rim, so
+    the chip keeps the subtle shading that makes it look moulded rather than flat.
+    """
+    img = img.convert("RGBA")
+    arr = np.array(img)
+    h, w, _ = arr.shape
+
+    cx, cy = w / 2.0, h * 0.46          # face centre sits above the stack's midline
+    rx, ry = w * 0.26, h * 0.30         # inside the gold spot ring, over the glyphs
+
+    # Two samples off the face, then used darkest-at-centre. A lighter centre reads as a
+    # glossy dome and fights the number that gets drawn on top; darker centre reads as a
+    # recessed inlay, which is what a real chip has.
+    a = arr[int(h * 0.28), int(w / 2), :3].astype(float)
+    b = arr[int(h * 0.46), int(w / 2), :3].astype(float)
+    centre_col, rim_col = (a, b) if a.sum() < b.sum() else (b, a)
+    # Keep the two close together so the fill stays almost flat.
+    rim_col = centre_col + (rim_col - centre_col) * 0.45
+
+    yy, xx = np.mgrid[0:h, 0:w]
+    r = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+    inside = r <= 1.0
+
+    t = np.clip(r, 0.0, 1.0)[..., None]
+    blend = centre_col * (1.0 - t) + rim_col * t
+
+    # Feather the last 12% so the patch melts into the surrounding face.
+    edge = np.clip((1.0 - r) / 0.12, 0.0, 1.0)[..., None]
+    mask = inside[..., None] * edge
+
+    arr[:, :, :3] = (arr[:, :, :3] * (1 - mask) + blend * mask).astype(np.uint8)
+    return Image.fromarray(arr, "RGBA")
+
+
+def key_by_luminance(img, lo=110.0, hi=175.0, feather=0.8):
+    """
+    Keeps the bright subject of a crop and drops everything darker.
+
+    The action icons are cream-and-gold line art (luminance ~250) sitting on the button's
+    dark fill (~30). Thresholding on brightness clears that fill everywhere — including
+    the areas enclosed by the DOUBLE badge's ring, which a border flood-fill could never
+    reach — and also removes the mid-tone gold frame the crop boxes clip at their edges.
+    """
+    img = img.convert("RGBA")
+    lum = np.array(img).astype(float)[:, :, :3].mean(2)
+    alpha = np.clip((lum - lo) / max(1.0, hi - lo), 0.0, 1.0) * 255.0
+    al = Image.fromarray(alpha.astype(np.uint8), "L")
+    img.putalpha(al.filter(ImageFilter.GaussianBlur(feather)))
     return img
 
 
@@ -358,19 +526,28 @@ def main():
     print("sprites lifted from the render:")
     # Gold filigree card back, straightened and sized to match the drawn faces.
     cut(src, (521, 205, 692, 404), os.path.join(CARDS_DIR, "card_Back.png"), (360, 504))
-    # The bet chip is a UI element, so it belongs with the rest of the kit.
-    cut(src, (655, 806, 846, 956), os.path.join(UI_DIR, "chip_stack.png"))
+    # The bet chip is a UI element, so it belongs with the rest of the kit. Its crop is a
+    # rectangle of felt with a round chip in it, so the felt has to be keyed away or the
+    # chip renders as a green box on the table.
+    chip_path = os.path.join(UI_DIR, "chip_stack.png")
+    chip = key_out_border(cut(src, (655, 806, 846, 956), chip_path))
+    blank_chip_denomination(chip).save(chip_path)
+    print("  (chip denomination painted out for a live label)")
 
     # The button frame itself: crop the STAND button, then diffuse away its icon and
     # label so only the gold frame and dark fill remain. Nine-sliced in Unity.
     # Action button icons — cropped tight from each button face.
+    # Each icon is cropped off its own button face, so the button's dark fill comes with
+    # it. Left opaque, every icon draws a dark rectangle over whatever colour its button
+    # ends up being — keying on brightness leaves just the cream line art.
     for name, box in (
         ("icon_hit",    (98, 1112, 210, 1210)),
         ("icon_stand",  (330, 1112, 442, 1210)),
         ("icon_double", (565, 1112, 677, 1210)),
         ("icon_split",  (800, 1112, 912, 1210)),
     ):
-        cut(src, box, os.path.join(UI_DIR, f"{name}.png"))
+        icon_path = os.path.join(UI_DIR, f"{name}.png")
+        key_by_luminance(cut(src, box, icon_path)).save(icon_path)
 
     # Menu button frames, recoloured from the render's own action-button frame so the
     # menu and the table share one treatment. Only the dark interior is shifted; gold
@@ -384,9 +561,11 @@ def main():
         button_frame(raw, tint).save(os.path.join(UI_DIR, f"{name}.b46.png"))
         print(f"  Assets/Art/UI/{name}.b46.png")
 
-    # Back arrow, lifted from the store render's top bar.
+    # Back arrow, lifted from the store render's top bar. Same treatment as the action
+    # icons: it sits on its own circular button in game, so the crop's dark disc has to go.
     store = Image.open(os.path.join(ROOT, "docs", "screenshots", "store.png")).convert("RGB")
-    cut(store, (26, 36, 106, 112), os.path.join(UI_DIR, "icon_back.png"))
+    back_path = os.path.join(UI_DIR, "icon_back.png")
+    key_by_luminance(cut(store, (26, 36, 106, 112), back_path)).save(back_path)
 
     print("store:")
     extract_store(store, UI_DIR, TABLE_DIR)
