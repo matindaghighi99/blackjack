@@ -932,32 +932,48 @@ namespace BlackjackGame.EditorTools
         }
 
         /// <summary>
-        /// Re-imports any art under Assets/Art that isn't a sprite yet. ArtImportSettings makes
-        /// them sprites on import, but a file imported before the editor scripts compiled keeps
-        /// the plain texture type until it's imported again.
+        /// Makes every PNG under Assets/Art load as a sprite before anything is built from it.
+        /// The committed .meta files and ArtImportSettings both ask for sprites, but a file
+        /// that still came in as a plain texture is switched over and re-imported here. A file
+        /// that still won't load fails with the importer Unity used, instead of a vague
+        /// "sprite not found" later on.
         /// </summary>
         private static void EnsureArtImportedAsSprites()
         {
-            var stale = new List<string>();
+            var fixedUp = new List<string>();
             foreach (string file in Directory.GetFiles("Assets/Art", "*.png", SearchOption.AllDirectories))
             {
                 string path = file.Replace('\\', '/');
-                if (AssetImporter.GetAtPath(path) is TextureImporter importer &&
-                    importer.textureType != TextureImporterType.Sprite)
-                    stale.Add(path);
-            }
-            if (stale.Count == 0) return;
+                if (AssetDatabase.LoadAssetAtPath<Sprite>(path) != null) continue;
 
-            AssetDatabase.StartAssetEditing();
-            try
-            {
-                foreach (string path in stale) AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                if (AssetImporter.GetAtPath(path) is TextureImporter texture)
+                {
+                    texture.textureType = TextureImporterType.Sprite;
+                    texture.spriteImportMode = SpriteImportMode.Single;
+                    texture.SaveAndReimport();
+                }
+                else
+                {
+                    AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                }
+
+                if (AssetDatabase.LoadAssetAtPath<Sprite>(path) == null)
+                    throw new InvalidOperationException(
+                        $"'{path}' will not import as a sprite ({DescribeImporter(path)}).");
+                fixedUp.Add(path);
             }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-            }
-            Debug.Log($"[SceneBootstrap] Re-imported {stale.Count} art file(s) as sprites.");
+            if (fixedUp.Count > 0)
+                Debug.Log($"[SceneBootstrap] Re-imported {fixedUp.Count} art file(s) as sprites, " +
+                          $"first: {fixedUp[0]}");
+        }
+
+        private static string DescribeImporter(string path)
+        {
+            AssetImporter importer = AssetImporter.GetAtPath(path);
+            if (importer == null) return "Unity has no importer for it; is the file in the project?";
+            if (importer is TextureImporter t)
+                return $"TextureImporter, type {t.textureType}, sprite mode {t.spriteImportMode}";
+            return importer.GetType().Name;
         }
 
         // =====================================================================
