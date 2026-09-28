@@ -94,3 +94,10 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+
+# ==============================================================
+#  Art pipeline scratch
+# ==============================================================
+__pycache__/
+*.pyc
+art-source/previews/

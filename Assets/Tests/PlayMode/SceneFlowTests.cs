@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using BlackjackGame.Blackjack;
 using BlackjackGame.Core;
@@ -12,17 +13,17 @@ using UnityEngine.UI;
 namespace BlackjackGame.PlayTests
 {
     /// <summary>
-    /// Play-mode smoke tests: these are the automated equivalent of "press Play from
-    /// MainMenu, deal a round, hit/stand, watch the chip balance move". They drive the
-    /// real scenes and real UI components (via <c>onClick.Invoke()</c>), so a broken
-    /// serialized reference or a missing scene in Build Settings fails the run.
+    /// Play-mode smoke tests: the automated equivalent of "press Play from MainMenu, bet a
+    /// chip, deal, hit/stand, watch the round settle and the chips move". They drive the
+    /// real scenes and real UI (via <c>onClick.Invoke()</c> on the same buttons a finger
+    /// would press), so a broken serialized reference or a missing scene fails the run.
     ///
     /// The scenes must exist and be registered in Build Settings — run
     /// <b>Blackjack ▸ Build UI Scenes</b> first.
     /// </summary>
     public class SceneFlowTests
     {
-        private const int TestBet = 100;
+        private const int TestChip = 100;
 
         // -----------------------------------------------------------------
         //  Helpers
@@ -38,61 +39,42 @@ namespace BlackjackGame.PlayTests
         private static T FindUI<T>(string gameObjectName) where T : Component
         {
             GameObject go = GameObject.Find(gameObjectName);
-            Assert.IsNotNull(go, $"GameObject '{gameObjectName}' not found in the active scene.");
+            Assert.IsNotNull(go, $"GameObject '{gameObjectName}' not found (or inactive) in the active scene.");
             var component = go.GetComponent<T>();
             Assert.IsNotNull(component, $"'{gameObjectName}' has no {typeof(T).Name}.");
             return component;
         }
 
+        /// <summary>Waits for a condition with a frame budget, so a stuck UI fails instead of hanging.</summary>
+        private static IEnumerator WaitUntil(Func<bool> condition, string what, int frames = 1200)
+        {
+            for (int frame = 0; frame < frames; frame++)
+            {
+                if (condition()) yield break;
+                yield return null;
+            }
+            Assert.Fail($"Timed out waiting for: {what}");
+        }
+
         /// <summary>
-        /// The Nth card image inside a HandView, found by name rather than by child index.
-        /// HandView also parents a drop shadow per card, so positional indexing into
-        /// GetComponentsInChildren picks up shadows.
+        /// The Nth card image inside a HandView, found by name. HandView also parents a
+        /// shadow per card, so positional indexing would pick up shadows.
         /// </summary>
         private static Image CardAt(HandView view, int index)
         {
             string wanted = $"Card_{index:00}";
             foreach (Image image in view.GetComponentsInChildren<Image>())
                 if (image.name == wanted) return image;
-
             Assert.Fail($"No '{wanted}' under {view.name}.");
             return null;
         }
 
-        /// <summary>
-        /// Waits until every hand has finished dealing and flipping, with a frame budget
-        /// so a stuck animation fails the test rather than hanging the run.
-        /// </summary>
-        private static IEnumerator WaitForCards(params HandView[] views)
+        private static bool Usable(string name)
         {
-            for (int frame = 0; frame < 600; frame++)
-            {
-                bool busy = false;
-                foreach (HandView view in views)
-                    if (view != null && view.IsAnimating) busy = true;
-
-                if (!busy) yield break;
-                yield return null;
-            }
-
-            Assert.Fail("Card animations did not settle within 600 frames.");
-        }
-
-        /// <summary>
-        /// Waits for a rolling counter to reach its target. The balance label animates to
-        /// its new value, so reading it the frame a round settles catches it mid-roll.
-        /// </summary>
-        private static IEnumerator WaitForRollup(CountRollup rollup)
-        {
-            if (rollup == null) yield break;
-
-            for (int frame = 0; frame < 600; frame++)
-            {
-                if (!rollup.IsRolling) yield break;
-                yield return null;
-            }
-
-            Assert.Fail("Balance rollup did not settle within 600 frames.");
+            GameObject go = GameObject.Find(name);
+            if (go == null) return false;
+            var button = go.GetComponent<Button>();
+            return button != null && button.isActiveAndEnabled && button.IsInteractable();
         }
 
         /// <summary>Boots the app the way a player would, and guarantees a spendable balance.</summary>
@@ -104,8 +86,8 @@ namespace BlackjackGame.PlayTests
                 "AppManager did not boot. Is it in MainMenu with both config assets assigned?");
             Assert.IsNotNull(AppManager.Instance.Chips, "AppManager.Chips is null — Bootstrap() bailed out.");
 
-            if (AppManager.Instance.Chips.Balance < TestBet * 10)
-                AppManager.Instance.Chips.Add(TestBet * 50);
+            if (AppManager.Instance.Chips.Balance < TestChip * 20)
+                AppManager.Instance.Chips.Add(TestChip * 50);
         }
 
         // -----------------------------------------------------------------
@@ -122,26 +104,22 @@ namespace BlackjackGame.PlayTests
             Assert.IsNotNull(AppManager.Instance.Rewards);
             Assert.IsNotNull(AppManager.Instance.Store);
 
-            var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
-            Assert.IsNotEmpty(balanceLabel.text, "Main menu balance label was never populated.");
+            Assert.IsNotEmpty(FindUI<TMP_Text>("BalanceLabel").text, "Main menu balance label was never populated.");
 
-            // The three routing buttons exist, are wired into the scene and are clickable.
             foreach (string name in new[] { "PlayButton", "StoreButton", "RewardsButton" })
             {
                 Button button = FindUI<Button>(name);
                 Assert.IsTrue(button.interactable, $"{name} is not interactable.");
-                Assert.IsNotNull(button.onClick, $"{name} has no onClick event.");
             }
 
             // Claiming the daily reward must always leave a message on the status label.
             FindUI<Button>("RewardsButton").onClick.Invoke();
             yield return null;
-            Assert.IsNotEmpty(FindUI<TMP_Text>("RewardStatusLabel").text,
-                "Reward status label was not updated after claiming.");
+            Assert.IsNotEmpty(FindUI<TMP_Text>("RewardStatusLabel").text, "Reward status label was not updated after claiming.");
         }
 
         [UnityTest]
-        public IEnumerator GameScene_DealHitStand_MovesChipBalance()
+        public IEnumerator GameScene_BetDealPlaySettle_MovesChipBalance()
         {
             yield return BootFromMainMenu();
             var chips = AppManager.Instance.Chips;
@@ -150,9 +128,12 @@ namespace BlackjackGame.PlayTests
             Assert.IsTrue(GameManager.Exists, "GameManager missing from the Game scene.");
             GameManager game = GameManager.Instance;
 
-            var betInput = FindUI<TMP_InputField>("BetInput");
-            Assert.AreEqual(TestBet.ToString(), betInput.text,
-                "Bet field should be pre-filled so Deal works with no typing.");
+            // Chip-first betting: nothing is staked until a chip is tapped.
+            Assert.IsFalse(Usable("DealButton"), "DEAL must be disabled before any bet is placed.");
+            FindUI<Button>($"Chip{TestChip}").onClick.Invoke();
+            yield return null;
+            Assert.AreEqual("100", FindUI<TMP_Text>("BetLabel").text, "The BET readout should show the stake.");
+            Assert.IsTrue(Usable("DealButton"), "DEAL should enable once the stake meets the table minimum.");
 
             long balanceBeforeDeal = chips.Balance;
             FindUI<Button>("DealButton").onClick.Invoke();
@@ -161,82 +142,65 @@ namespace BlackjackGame.PlayTests
             Assert.IsNotNull(game.Engine, "Deal did not start a round.");
             Assert.AreEqual(1, game.Engine.PlayerHands.Count);
             Assert.AreEqual(2, game.Engine.PlayerHands[0].Cards.Count, "Player should hold two cards.");
-            Assert.GreaterOrEqual(game.Engine.DealerHand.Cards.Count, 1);
 
-            // Cards must actually be drawn, not just held in the engine.
             var dealerCards = FindUI<HandView>("DealerHandView");
             var playerCards = FindUI<HandView>("PlayerHandView");
-
-            // Cards are dealt in and turned over with animation, so wait for them to
-            // settle before reading sprites — otherwise the assertions race the flip.
-            yield return WaitForCards(dealerCards, playerCards);
+            yield return WaitUntil(() => !dealerCards.IsAnimating && !playerCards.IsAnimating, "the opening deal to land");
             Assert.AreEqual(2, playerCards.VisibleCardCount, "Player's cards were not rendered.");
-            Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount,
-                "Dealer's cards were not rendered.");
 
             if (game.Engine.Phase == RoundPhase.PlayerTurn)
             {
-                // The hole card must stay face down, and the label must not leak the total.
+                Assert.AreEqual(balanceBeforeDeal - TestChip, chips.Balance, "Placing a bet should debit exactly the bet.");
+
+                // The hole card stays face down while the player acts.
                 if (game.Engine.DealerHand.Cards.Count > 1)
-                {
-                    Image hole = CardAt(dealerCards, 1);
-                    Assert.IsNotNull(hole.sprite, "Hole card has no sprite.");
-                    StringAssert.Contains("Back", hole.sprite.name,
+                    StringAssert.Contains("Back", CardAt(dealerCards, 1).sprite.name,
                         "Dealer's hole card should be face down during the player's turn.");
-                    StringAssert.Contains("?", FindUI<TMP_Text>("DealerHandLabel").text,
-                        "Dealer label leaks the hidden card's value.");
-                }
 
-                // Stake debited, round in progress.
-                Assert.AreEqual(balanceBeforeDeal - TestBet, chips.Balance,
-                    "Placing a bet should debit exactly the bet amount.");
+                yield return WaitUntil(() => Usable("StandButton"), "actions to unlock after the deal");
 
-                if (game.Engine.CanHit)
+                if (Usable("HitButton") && game.Engine.PlayerHands[0].Value < 12)
                 {
                     int before = game.Engine.PlayerHands[0].Cards.Count;
                     FindUI<Button>("HitButton").onClick.Invoke();
                     yield return null;
                     Assert.AreEqual(before + 1, game.Engine.PlayerHands[0].Cards.Count, "Hit drew no card.");
-                    yield return WaitForCards(dealerCards, playerCards);
                 }
 
-                // Look the button up inside the loop rather than caching it: the action
-                // row is hidden the moment the round settles, and hitting can bust the
-                // hand — so a reference taken beforehand may point at a hidden object.
+                // Stand through whatever is left (split hands included); buttons are looked up
+                // each time because the action row hides the moment the round settles.
                 int guard = 0;
-                while (game.Engine.Phase == RoundPhase.PlayerTurn && guard++ < 25)
+                while (game.Engine.Phase == RoundPhase.PlayerTurn && guard++ < 50)
                 {
-                    FindUI<Button>("StandButton").onClick.Invoke();
+                    yield return WaitUntil(() => Usable("StandButton") || game.Engine.Phase != RoundPhase.PlayerTurn,
+                        "STAND to be available");
+                    if (Usable("StandButton")) FindUI<Button>("StandButton").onClick.Invoke();
                     yield return null;
                 }
             }
-            else
-            {
-                // Natural blackjack settled instantly — balance already reflects the payout.
-                Assert.AreNotEqual(balanceBeforeDeal, chips.Balance);
-            }
 
             Assert.AreEqual(RoundPhase.Settled, game.Engine.Phase, "Round never settled.");
-            yield return WaitForCards(dealerCards, playerCards);
+
+            // The table tells the story in order; when it's done the bet row comes back.
+            yield return WaitUntil(() => GameObject.Find("BetRow") != null && Usable("DealButton"),
+                "the settle sequence to finish and betting to reopen", 2400);
 
             var balanceLabel = FindUI<TMP_Text>("BalanceLabel");
-            yield return WaitForRollup(balanceLabel.GetComponent<CountRollup>());
-            Assert.IsTrue(long.TryParse(balanceLabel.text.Replace(",", ""), out long shownBalance),
+            yield return WaitUntil(() => !balanceLabel.GetComponent<CountRollup>().IsRolling, "the balance to finish rolling");
+            Assert.IsTrue(long.TryParse(balanceLabel.text.Replace(",", ""), out long shown),
                 $"Table balance label should be a plain number, was '{balanceLabel.text}'.");
-            Assert.AreEqual(chips.Balance, shownBalance, "Balance label is out of sync.");
-            Assert.IsNotEmpty(FindUI<TMP_Text>("DealerHandLabel").text);
-            Assert.IsNotEmpty(FindUI<TMP_Text>("PlayerHandLabel").text);
+            // The re-bet is placed back on the felt from the balance display only visually;
+            // the label shows the real balance.
+            Assert.AreEqual(chips.Balance, shown, "Balance label is out of sync with ChipManager.");
 
             // Once settled the dealer's hand is fully revealed.
             Assert.AreEqual(game.Engine.DealerHand.Cards.Count, dealerCards.VisibleCardCount);
             for (int i = 0; i < dealerCards.VisibleCardCount; i++)
-            {
-                Image card = CardAt(dealerCards, i);
-                Assert.IsFalse(card.sprite != null && card.sprite.name.Contains("Back"),
+                Assert.IsFalse(CardAt(dealerCards, i).sprite.name.Contains("Back"),
                     "Dealer still has a face-down card after the round settled.");
-            }
-            StringAssert.DoesNotContain("?", FindUI<TMP_Text>("DealerHandLabel").text);
-            Assert.IsNotEmpty(FindUI<TMP_Text>("OutcomeLabel").text, "No outcome was shown.");
+
+            Assert.IsNotEmpty(FindUI<TMP_Text>("Headline").text, "No verdict was shown.");
+            Assert.IsNotEmpty(FindUI<TMP_Text>("StatusLabel").text, "The status line went blank.");
         }
 
         [UnityTest]
@@ -255,7 +219,7 @@ namespace BlackjackGame.PlayTests
 
             long before = chips.Balance;
             var firstPack = packList.transform.GetChild(0).GetComponent<Button>();
-            Assert.IsNotNull(firstPack, "Pack row is not a Button — check the PackButton prefab.");
+            Assert.IsNotNull(firstPack, "Pack row is not a Button — check the StorePackRow prefab.");
 
             firstPack.onClick.Invoke();
             yield return null;

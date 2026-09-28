@@ -20,7 +20,7 @@ namespace BlackjackGame.EditorTools
 
         /// <summary>
         /// A filename ending in ".b&lt;N&gt;" declares an N-pixel nine-slice border,
-        /// e.g. <c>btn_green.b56.png</c>. Encoding it in the name keeps the border with
+        /// e.g. <c>ui_rrect.b48.png</c>. Encoding it in the name keeps the border with
         /// the art that was drawn for it, so regenerating the kit can't desync them.
         /// </summary>
         private static readonly Regex BorderSuffix =
@@ -35,9 +35,19 @@ namespace BlackjackGame.EditorTools
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
             importer.alphaIsTransparency = true;
-            importer.mipmapEnabled = false;
-            importer.wrapMode = TextureWrapMode.Clamp;
-            importer.filterMode = FilterMode.Bilinear;
+
+            // Cards and chips are drawn well below their source size and are constantly
+            // moving (dealt, flipped, stacked, swept); without mips they shimmer. Trilinear
+            // with a slight negative bias keeps indices crisp. Flat UI art stays mip-free.
+            bool moving = path.StartsWith(ArtRoot + "Cards/") || path.StartsWith(ArtRoot + "Chips/");
+            importer.mipmapEnabled = moving;
+            importer.mipMapBias = moving ? -0.4f : 0f;
+            importer.filterMode = moving ? FilterMode.Trilinear : FilterMode.Bilinear;
+
+            // Tileable textures (the felt fibre) repeat so a Tiled Image is one quad, not hundreds.
+            importer.wrapMode = Path.GetFileNameWithoutExtension(path).EndsWith("_fiber")
+                ? TextureWrapMode.Repeat
+                : TextureWrapMode.Clamp;
             importer.spritePixelsPerUnit = 100f;
             importer.maxTextureSize = 2048;
             // UI art is read at close to 1:1, so block compression artefacts would show.

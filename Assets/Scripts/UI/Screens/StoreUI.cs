@@ -4,6 +4,7 @@ using BlackjackGame.Config;
 using BlackjackGame.Core;
 using BlackjackGame.Economy;
 using BlackjackGame.UI.Components;
+using BlackjackGame.UI.Theme;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -150,8 +151,8 @@ namespace BlackjackGame.UI.Screens
 
             DailyRewardResult result = AppManager.Instance.Rewards.TryClaim(DateTime.UtcNow);
             SetStatus(result.Success
-                ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
-                : $"Next reward in {result.TimeUntilNext.Hours}h {result.TimeUntilNext.Minutes}m");
+                ? $"+{result.ChipsAwarded:N0} chips  \u00B7  day {result.NewStreak} streak"
+                : $"Next reward in {(int)result.TimeUntilNext.TotalHours}h {result.TimeUntilNext.Minutes}m");
             RefreshBalance();
         }
 
@@ -171,9 +172,7 @@ namespace BlackjackGame.UI.Screens
             SetStatus(result.Message);
             if (_statusPunch != null)
             {
-                _statusPunch.Play(
-                    result.Success ? new Color(0.42f, 1f, 0.55f) : new Color(1f, 0.42f, 0.42f),
-                    result.Success ? 1f : 0.4f);
+                _statusPunch.Play(result.Success ? Palette.Win : Palette.Loss, result.Success ? 1f : 0.4f);
             }
             RefreshBalance();
 

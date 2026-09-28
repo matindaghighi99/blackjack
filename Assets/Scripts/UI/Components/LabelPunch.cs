@@ -1,28 +1,28 @@
+using BlackjackGame.UI.Theme;
 using TMPro;
 using UnityEngine;
 
 namespace BlackjackGame.UI.Components
 {
     /// <summary>
-    /// Makes a text label announce itself: it slams in oversized, overshoots, then settles,
-    /// optionally tinted and shivering. Used for the round outcome ("Blackjack!", "Bust"),
-    /// where the difference between a line of text appearing and a line of text *landing*
-    /// is most of the felt drama.
+    /// Makes a status line arrive instead of blinking in: it rises a few units, fades up,
+    /// settles from a hair larger than its resting size, and briefly carries a tint.
+    ///
+    /// Deliberately understated — a message changing should be noticed, not shouted. The
+    /// API (and its <c>shake</c> parameter, now read as "emphasis") is kept so existing
+    /// callers work unchanged.
     /// </summary>
     [RequireComponent(typeof(TMP_Text))]
     public sealed class LabelPunch : MonoBehaviour
     {
-        [Tooltip("Starting scale multiplier for the slam.")]
-        [SerializeField] private float _startScale = 2.1f;
-        [Tooltip("Seconds for the slam to resolve.")]
-        [SerializeField] private float _duration = 0.5f;
-        [Tooltip("How far past 1.0 the overshoot bounces before settling.")]
-        [SerializeField] private float _overshoot = 0.16f;
-
-        [Header("Shake")]
-        [Tooltip("Peak positional shiver, in canvas units.")]
-        [SerializeField] private float _shakeAmplitude = 9f;
-        [SerializeField] private float _shakeFrequency = 46f;
+        [Tooltip("Starting scale multiplier.")]
+        [SerializeField] private float _startScale = 1.06f;
+        [Tooltip("Seconds for the reveal to resolve.")]
+        [SerializeField] private float _duration = 0.45f;
+        [Tooltip("How far the label rises into place, in canvas units.")]
+        [SerializeField] private float _rise = 10f;
+        [Tooltip("Seconds the tint holds before easing back to the label's own colour.")]
+        [SerializeField] private float _tintHold = 1.2f;
 
         private TMP_Text _label;
         private RectTransform _rect;
@@ -31,7 +31,7 @@ namespace BlackjackGame.UI.Components
         private bool _homeCaptured;
 
         private float _t = 1f;
-        private float _shakeScale;
+        private float _emphasis = 1f;
         private Color _tint;
         private bool _tinted;
 
@@ -45,9 +45,8 @@ namespace BlackjackGame.UI.Components
         private void OnEnable() => CaptureHome();
 
         /// <summary>
-        /// Home position is captured lazily rather than in Awake: SceneBootstrap positions
-        /// these labels after construction, so reading it too early stores (0,0) and the
-        /// label would snap to the middle of the canvas after its first punch.
+        /// Home position is captured lazily rather than in Awake: layout code positions
+        /// these labels after construction, so reading it too early stores the wrong spot.
         /// </summary>
         private void CaptureHome()
         {
@@ -56,17 +55,24 @@ namespace BlackjackGame.UI.Components
             _homeCaptured = true;
         }
 
-        /// <summary>Plays the slam. Pass a colour to tint the label as it lands.</summary>
+        /// <summary>Re-reads the resting position after a layout change.</summary>
+        public void Rehome()
+        {
+            _homeCaptured = false;
+            CaptureHome();
+        }
+
+        /// <summary>Plays the reveal. Pass a colour to tint the label as it lands.</summary>
         public void Play(Color? tint = null, float shake = 1f)
         {
             CaptureHome();
             _t = 0f;
-            _shakeScale = Mathf.Max(0f, shake);
+            _emphasis = Mathf.Clamp(shake, 0.35f, 1.5f);
             _tinted = tint.HasValue;
             if (tint.HasValue) _tint = tint.Value;
         }
 
-        /// <summary>Cancels any punch in progress and restores the resting look.</summary>
+        /// <summary>Cancels any reveal in progress and restores the resting look.</summary>
         public void ResetNow()
         {
             _t = 1f;
@@ -74,30 +80,37 @@ namespace BlackjackGame.UI.Components
             CaptureHome();
             _rect.localScale = Vector3.one;
             _rect.anchoredPosition = _homePosition;
-            if (_label != null) _label.color = _baseColor;
+            if (_label != null)
+            {
+                _label.color = _baseColor;
+                _label.alpha = 1f;
+            }
         }
 
         private void Update()
         {
             if (_rect == null || _t >= 1f) return;
 
-            _t = Mathf.Min(1f, _t + Time.unscaledDeltaTime / Mathf.Max(0.01f, _duration));
+            float total = _duration + _tintHold;
+            _t = Mathf.Min(1f, _t + Time.unscaledDeltaTime / Mathf.Max(0.01f, MotionPrefs.Duration(total)));
+            float k = Mathf.Clamp01(_t * total / _duration);
+            float e = Ease.OutCubic(k);
 
-            float e = 1f - Mathf.Pow(1f - _t, 3f);
-
-            // Ease down from the oversized start, then add a decaying sine bounce so the
-            // label springs rather than merely shrinking.
-            float baseScale = Mathf.LerpUnclamped(_startScale, 1f, e);
-            float bounce = _overshoot * Mathf.Sin(_t * Mathf.PI * 2f) * (1f - _t);
-            float s = baseScale + bounce;
+            float s = Mathf.LerpUnclamped(1f + (_startScale - 1f) * _emphasis, 1f, e);
+            if (MotionPrefs.Reduced) s = 1f;
             _rect.localScale = new Vector3(s, s, 1f);
+            _rect.anchoredPosition = _homePosition - new Vector2(0f, MotionPrefs.Amount(_rise) * (1f - e));
 
-            float decay = (1f - _t) * (1f - _t);
-            float offset = Mathf.Sin(_t * _shakeFrequency) * _shakeAmplitude * decay * _shakeScale;
-            _rect.anchoredPosition = _homePosition + new Vector2(offset, 0f);
-
-            if (_label != null && _tinted)
-                _label.color = Color.Lerp(_baseColor, _tint, decay);
+            if (_label != null)
+            {
+                if (_tinted)
+                {
+                    float hold = Mathf.Clamp01((_t * total - _duration) / Mathf.Max(0.01f, _tintHold));
+                    _label.color = Color.Lerp(_tint, _baseColor, Ease.InOutCubic(hold));
+                }
+                // After the colour, which carries its own alpha.
+                _label.alpha = Mathf.Clamp01(k * 1.8f);
+            }
 
             if (_t >= 1f) ResetNow();
         }
