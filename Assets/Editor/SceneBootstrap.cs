@@ -167,6 +167,7 @@ namespace BlackjackGame.EditorTools
             EnsureFolder(PrefabsFolder);
 
             if (!FontAssetBuilder.AllBuilt()) FontAssetBuilder.BuildAll();
+            EnsureArtImportedAsSprites();
 
             // Only guarantees the assets exist on disk. Do NOT hold the returned
             // references across a scene change — see RequireAsset below.
@@ -905,9 +906,8 @@ namespace BlackjackGame.EditorTools
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>($"{folder}/{name}.png");
             if (sprite != null) return sprite;
 
-            foreach (string guid in AssetDatabase.FindAssets($"{name} t:Sprite", new[] { folder }))
+            foreach (string path in ArtFiles(folder, name + ".b*.png"))
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (Path.GetFileName(path).StartsWith(name + ".b", StringComparison.Ordinal))
                     return AssetDatabase.LoadAssetAtPath<Sprite>(path);
             }
@@ -915,6 +915,49 @@ namespace BlackjackGame.EditorTools
             throw new InvalidOperationException(
                 $"Sprite '{name}' not found in {folder}. Run 'python3 art-source/generate_premium_art.py' " +
                 "from the project root, then let Unity import the files.");
+        }
+
+        /// <summary>
+        /// The art files in a folder, listed from disk as project-relative paths. Not
+        /// AssetDatabase.FindAssets: its fuzzy name search found nothing for "chip_" on a fresh
+        /// Unity 6.3 import, and the builder needs exact file names anyway.
+        /// </summary>
+        private static string[] ArtFiles(string folder, string pattern)
+        {
+            if (!Directory.Exists(folder)) return Array.Empty<string>();
+            string[] files = Directory.GetFiles(folder, pattern, SearchOption.TopDirectoryOnly);
+            for (int i = 0; i < files.Length; i++) files[i] = files[i].Replace('\\', '/');
+            Array.Sort(files, StringComparer.Ordinal);
+            return files;
+        }
+
+        /// <summary>
+        /// Re-imports any art under Assets/Art that isn't a sprite yet. ArtImportSettings makes
+        /// them sprites on import, but a file imported before the editor scripts compiled keeps
+        /// the plain texture type until it's imported again.
+        /// </summary>
+        private static void EnsureArtImportedAsSprites()
+        {
+            var stale = new List<string>();
+            foreach (string file in Directory.GetFiles("Assets/Art", "*.png", SearchOption.AllDirectories))
+            {
+                string path = file.Replace('\\', '/');
+                if (AssetImporter.GetAtPath(path) is TextureImporter importer &&
+                    importer.textureType != TextureImporterType.Sprite)
+                    stale.Add(path);
+            }
+            if (stale.Count == 0) return;
+
+            AssetDatabase.StartAssetEditing();
+            try
+            {
+                foreach (string path in stale) AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+            Debug.Log($"[SceneBootstrap] Re-imported {stale.Count} art file(s) as sprites.");
         }
 
         // =====================================================================
@@ -1681,15 +1724,15 @@ namespace BlackjackGame.EditorTools
             var so = new SerializedObject(library);
 
             var values = new List<int>();
-            foreach (string guid in AssetDatabase.FindAssets("chip_ t:Sprite", new[] { ChipArtFolder }))
+            foreach (string path in ArtFiles(ChipArtFolder, "chip_*.png"))
             {
-                string file = Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid));
-                Match m = Regex.Match(file, @"^chip_(\d+)$");
+                Match m = Regex.Match(Path.GetFileNameWithoutExtension(path), @"^chip_(\d+)$");
                 if (m.Success) values.Add(int.Parse(m.Groups[1].Value));
             }
             values.Sort();
             if (values.Count == 0)
-                throw new InvalidOperationException("No chip art in " + ChipArtFolder + ". Run art-source/generate_premium_art.py.");
+                throw new InvalidOperationException(
+                    "No chip art (chip_<value>.png) in " + ChipArtFolder + ". Run art-source/generate_premium_art.py.");
 
             SerializedProperty entries = so.FindProperty("_entries");
             entries.arraySize = values.Count;
