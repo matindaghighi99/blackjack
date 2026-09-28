@@ -1,213 +1,461 @@
-using TMPro;
+using System.Collections.Generic;
+using BlackjackGame.UI.Feedback;
+using BlackjackGame.UI.Presentation;
+using BlackjackGame.UI.Theme;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BlackjackGame.UI.Components
 {
     /// <summary>
-    /// The stake on the table, as a chip that actually travels.
+    /// The stake on the felt, as a physical stack of chips.
     ///
-    /// Placing a bet throws the chip from the balance pill down to the betting spot;
-    /// winning sends it back up to the pill; losing slides it away to the dealer. Chips
-    /// moving between the player's balance and the table is the clearest way to show
-    /// where the money went — a number changing in a corner is not.
+    /// Each chip tapped in the rack is thrown onto the stack, which then re-composes into
+    /// the fewest real denominations (the way a dealer "colours up"). At settlement a won
+    /// round brings the dealer's payout across to sit beside the stake before both slide
+    /// home to the balance; a push slides the stake home; a loss is swept to the dealer.
+    /// Chips moving between the player and the house is the clearest way to show where
+    /// the money went — a number changing in a corner is not.
     ///
-    /// The chip's denomination is drawn live rather than baked into the sprite, so it
-    /// always shows the real stake (including after a double or a split).
+    /// Presentational only: amounts are supplied by the table screen from the engine and
+    /// <c>GameManager</c>; nothing here decides what a stake or payout is.
     /// </summary>
     public sealed class BetChipView : MonoBehaviour
     {
-        private enum Mode { Hidden, Placing, Resting, Returning, Losing }
+        public enum SettleKind
+        {
+            /// <summary>The stake is lost: swept to the dealer.</summary>
+            Lose,
+            /// <summary>The stake comes back (push, surrender): slid home.</summary>
+            Return,
+            /// <summary>The stake comes back with winnings paid beside it.</summary>
+            Win,
+        }
 
-        [Tooltip("Draws the stake on the chip face. The sprite's own number is painted out.")]
-        [SerializeField] private TMP_Text _label;
+        [SerializeField] private ChipSpriteLibrary _library;
+        [Tooltip("Holds the stake's chips. Moves as one during sweeps.")]
+        [SerializeField] private RectTransform _stack;
+        [Tooltip("Holds the winnings the dealer pays out beside the stake.")]
+        [SerializeField] private RectTransform _payout;
+        [Tooltip("A single chip that travels from the rack to the stack on each tap.")]
+        [SerializeField] private Image _flyer;
 
-        [Header("Flight")]
-        [Tooltip("Where the chip flies from and back to — the balance pill, in canvas units.")]
-        [SerializeField] private Vector2 _flyFrom = new Vector2(-236f, 830f);
-        [Tooltip("Where a lost chip is swept off to — the dealer's side of the table.")]
-        [SerializeField] private Vector2 _loseTo = new Vector2(120f, 520f);
-        [SerializeField] private float _placeDuration = 0.46f;
-        [SerializeField] private float _returnDuration = 0.5f;
+        [Header("Stack")]
+        [SerializeField] private float _chipWidth = 124f;
+        [Tooltip("Vertical step between stacked chips, in canvas units.")]
+        [SerializeField] private float _chipStep = 10f;
+        [SerializeField] private int _maxChips = 10;
 
-        [Tooltip("Sideways bow of the flight path, in canvas units.")]
-        [SerializeField] private float _arc = 190f;
-        [Tooltip("Degrees the chip spins through while travelling.")]
-        [SerializeField] private float _spin = 260f;
-        [Tooltip("Scale the chip starts at, as if thrown from a distance.")]
-        [SerializeField] private float _flyScale = 0.45f;
-        [Tooltip("How far past full size the chip swells as it lands, before settling.")]
-        [SerializeField] private float _landOvershoot = 0.16f;
+        [Header("Timing")]
+        [SerializeField] private float _placeDuration = 0.34f;
+        [SerializeField] private float _payoutDuration = 0.5f;
+        [SerializeField] private float _payoutHold = 0.5f;
+        [SerializeField] private float _sweepDuration = 0.5f;
 
+        private enum Phase { Idle, PayoutIn, Hold, Sweep }
+
+        private readonly List<Image> _stackChips = new List<Image>();
+        private readonly List<Image> _payoutChips = new List<Image>();
+        private Image _stackShadow;
+        private Image _payoutShadow;
+        private CanvasGroup _stackGroup;
+        private CanvasGroup _payoutGroup;
         private RectTransform _rect;
-        private CanvasGroup _group;
-        private Vector2 _rest;
-        private Mode _mode = Mode.Hidden;
-        private float _t;
-        private float _land;
 
-        /// <summary>Where the current inbound flight started (pill or a chip button).</summary>
-        private Vector2 _flightOrigin;
+        private int[] _denominations = { 10, 25, 100, 500, 1000 };
+        private long _amount;
+
+        private bool _haveHomes;
+        private Vector3 _balanceWorld;
+        private Vector3 _dealerWorld;
+
+        private Vector2 _restTarget;
+        private bool _restInitialised;
+
+        private bool _flying;
+        private float _flyT;
+        private Vector2 _flyFrom;
+        private long _flyAmount;
+
+        private float _punch;
+
+        private Phase _phase;
+        private float _t;
+        private SettleKind _kind;
+        private Vector2 _sweepTo;
+
+        /// <summary>The amount currently shown on the felt (after any chip in flight lands).</summary>
+        public long Amount => _flying ? _flyAmount : _amount;
+
+        /// <summary>True while a stake is on the felt (or landing on it).</summary>
+        public bool IsOnTable => Amount > 0 && _phase == Phase.Idle;
+
+        /// <summary>True while chips are moving.</summary>
+        public bool IsBusy => _flying || _phase != Phase.Idle;
 
         private void Awake()
         {
             _rect = (RectTransform)transform;
-            // The betting spot is wherever the scene placed this object; it is serialized
-            // by the time Awake runs, so reading it here is safe.
-            _rest = _rect.anchoredPosition;
-
-            _group = GetComponent<CanvasGroup>();
-            if (_group == null) _group = gameObject.AddComponent<CanvasGroup>();
-
+            _stackGroup = EnsureGroup(_stack);
+            _payoutGroup = EnsureGroup(_payout);
+            if (_flyer != null) _flyer.enabled = false;
             Hide();
         }
 
-        /// <summary>Hides the chip immediately, with no animation.</summary>
-        public void Hide()
+        private static CanvasGroup EnsureGroup(RectTransform root)
         {
-            _mode = Mode.Hidden;
-            _t = 0f;
-            _land = 0f;
-            if (_group != null) _group.alpha = 0f;
-            if (_rect != null)
-            {
-                _rect.anchoredPosition = _rest;
-                _rect.localScale = Vector3.one;
-                _rect.localRotation = Quaternion.identity;
-            }
+            if (root == null) return null;
+            var group = root.GetComponent<CanvasGroup>();
+            if (group == null) group = root.gameObject.AddComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            return group;
         }
 
-        /// <summary>Throws the chip from the balance onto the table.</summary>
-        public void PlaceBet(long amount)
+        // =====================================================================
+        //  Configuration
+        // =====================================================================
+
+        /// <summary>The denominations stacks are composed from (from GameConfig).</summary>
+        public void SetDenominations(int[] denominations)
         {
-            SetAmount(amount);
-            _flightOrigin = _flyFrom;
-            _mode = Mode.Placing;
-            _t = 0f;
-            _land = 0f;
-            if (_group != null) _group.alpha = 1f;
-            Apply();
+            if (denominations != null && denominations.Length > 0) _denominations = denominations;
+            Rebuild(_stack, _stackChips, ref _stackShadow, _amount);
         }
 
-        /// <summary>True while the chip is on the felt (arriving or resting).</summary>
-        public bool IsOnTable => _mode == Mode.Placing || _mode == Mode.Resting;
+        /// <summary>Where chips go home to (the balance readout) and where losses go (the dealer).</summary>
+        public void SetHomes(Vector3 balanceWorld, Vector3 dealerWorld)
+        {
+            _haveHomes = true;
+            _balanceWorld = balanceWorld;
+            _dealerWorld = dealerWorld;
+        }
+
+        /// <summary>Moves the betting spot (layout change, split in landscape). Eases unless instant.</summary>
+        public void SetRestPosition(Vector2 anchoredPosition, bool instant)
+        {
+            if (_rect == null) _rect = (RectTransform)transform;
+            _restTarget = anchoredPosition;
+            if (instant || !_restInitialised || MotionPrefs.Reduced) _rect.anchoredPosition = anchoredPosition;
+            _restInitialised = true;
+        }
+
+        public void SetChipWidth(float width)
+        {
+            _chipWidth = width;
+            _chipStep = width * 0.082f;
+            Rebuild(_stack, _stackChips, ref _stackShadow, _amount);
+        }
+
+        // =====================================================================
+        //  Betting
+        // =====================================================================
 
         /// <summary>
-        /// Grows the stake while the player is still building it: the first denomination
-        /// tap throws the chip in from that button; later taps update the number and give
-        /// the stack a little settle-kick, as if another chip just landed on it.
+        /// Throws one chip of <paramref name="chipValue"/> from <paramref name="fromWorld"/>
+        /// (the tapped rack chip, or the balance for a double) onto the stack, which then
+        /// shows <paramref name="newAmount"/>.
         /// </summary>
-        public void ShowPreview(long amount, Vector2 fromCanvasPosition)
+        public void AddChip(long newAmount, int chipValue, Vector3 fromWorld)
         {
-            SetAmount(amount);
+            CancelSettle();
 
-            if (_mode == Mode.Hidden || _mode == Mode.Returning || _mode == Mode.Losing)
+            if (_flying) Land(); // a quick second tap lands the first chip at once
+            if (_flyer == null || _library == null)
             {
-                _flightOrigin = fromCanvasPosition;
-                _mode = Mode.Placing;
-                _t = 0f;
-                _land = 0f;
-                if (_group != null) _group.alpha = 1f;
-                Apply();
+                SetAmount(newAmount);
+                return;
             }
-            else
-            {
-                Punch();
-            }
+
+            _flyAmount = newAmount;
+            _flyFrom = _rect.InverseTransformPoint(fromWorld);
+            _flyT = 0f;
+            _flying = true;
+            _flyer.sprite = _library.Get(chipValue).Side;
+            _flyer.enabled = true;
+            SizeChip(_flyer, _chipWidth);
+            UpdateFlyer();
         }
 
-        /// <summary>A settle-kick on the resting chip — another chip hitting the stack.</summary>
-        public void Punch()
-        {
-            if (_mode == Mode.Placing) return; // already animating in
-            _mode = Mode.Resting;
-            _land = 1f;
-            if (_group != null) _group.alpha = 1f;
-            Apply();
-        }
-
-        /// <summary>Updates the number on the chip without re-throwing it.</summary>
+        /// <summary>Shows <paramref name="amount"/> on the felt without a throw.</summary>
         public void SetAmount(long amount)
         {
-            if (_label != null) _label.text = amount.ToString("N0");
+            CancelSettle();
+            _flying = false;
+            if (_flyer != null) _flyer.enabled = false;
+            _amount = amount;
+            ResetRoots();
+            Rebuild(_stack, _stackChips, ref _stackShadow, amount);
         }
 
-        /// <summary>
-        /// Points the "home" end of flights at the balance pill's real position on this
-        /// device (safe area shifts it), replacing the baked reference-canvas guess.
-        /// </summary>
-        public void SetPillPosition(Vector2 canvasPosition) => _flyFrom = canvasPosition;
-
-        /// <summary>
-        /// Settles the round: a won stake flies back to the balance, a lost one is swept
-        /// away toward the dealer. A push is treated as a return — the stake does come back.
-        /// </summary>
-        public void Settle(bool playerKeepsStake)
+        /// <summary>A small settle-kick on the stack — the moment a stake becomes real.</summary>
+        public void Punch()
         {
-            if (_mode == Mode.Hidden) return;
-            _mode = playerKeepsStake ? Mode.Returning : Mode.Losing;
-            _t = 0f;
+            if (!MotionPrefs.Reduced) _punch = 1f;
         }
+
+        /// <summary>Removes the stake immediately.</summary>
+        public void Hide()
+        {
+            _flying = false;
+            if (_flyer != null) _flyer.enabled = false;
+            _phase = Phase.Idle;
+            _amount = 0;
+            ResetRoots();
+            Rebuild(_stack, _stackChips, ref _stackShadow, 0);
+            Rebuild(_payout, _payoutChips, ref _payoutShadow, 0);
+        }
+
+        /// <summary>Takes the stake back to the balance (the player cleared their bet).</summary>
+        public void ClearToBalance()
+        {
+            if (Amount <= 0) return;
+            if (_flying) Land();
+            StartSweep(SettleKind.Return);
+        }
+
+        // =====================================================================
+        //  Settlement
+        // =====================================================================
+
+        /// <summary>
+        /// Plays the stake out. Returns the seconds until the chips reach their destination,
+        /// so the caller can roll the balance at the moment they arrive.
+        /// </summary>
+        public float Settle(SettleKind kind, long winnings)
+        {
+            if (_flying) Land();
+            if (Amount <= 0 && winnings <= 0) return 0f;
+
+            if (kind == SettleKind.Win && winnings > 0)
+            {
+                _kind = kind;
+                Rebuild(_payout, _payoutChips, ref _payoutShadow, winnings);
+                _payoutGroup.alpha = 1f;
+                _phase = Phase.PayoutIn;
+                _t = 0f;
+                UpdateSettle();
+                return MotionPrefs.Duration(_payoutDuration + _payoutHold + _sweepDuration);
+            }
+
+            StartSweep(kind == SettleKind.Win ? SettleKind.Return : kind);
+            return MotionPrefs.Duration(_sweepDuration);
+        }
+
+        private void StartSweep(SettleKind kind)
+        {
+            _kind = kind;
+            _phase = Phase.Sweep;
+            _t = 0f;
+            Vector3 target = kind == SettleKind.Lose ? _dealerWorld : _balanceWorld;
+            _sweepTo = _haveHomes ? (Vector2)_rect.InverseTransformPoint(target) : new Vector2(0f, 600f);
+            UiCues.Raise(kind == SettleKind.Lose ? UiCue.ChipLose : UiCue.ChipCollect);
+        }
+
+        private void CancelSettle()
+        {
+            if (_phase == Phase.Idle) return;
+            _phase = Phase.Idle;
+            _amount = 0;
+            ResetRoots();
+            Rebuild(_stack, _stackChips, ref _stackShadow, 0);
+            Rebuild(_payout, _payoutChips, ref _payoutShadow, 0);
+        }
+
+        // =====================================================================
+        //  Animation
+        // =====================================================================
 
         private void Update()
         {
-            switch (_mode)
+            float dt = Time.deltaTime;
+
+            if (_restInitialised && (_rect.anchoredPosition - _restTarget).sqrMagnitude > 0.01f)
             {
-                case Mode.Hidden:
-                    return;
+                _rect.anchoredPosition = MotionPrefs.Reduced
+                    ? _restTarget
+                    : Ease.Damp(_rect.anchoredPosition, _restTarget, 8f, dt);
+            }
 
-                case Mode.Placing:
-                    _t = Mathf.Min(1f, _t + Time.deltaTime / Mathf.Max(0.01f, _placeDuration));
-                    if (_t >= 1f)
+            if (_flying)
+            {
+                _flyT = Mathf.Min(1f, _flyT + dt / Mathf.Max(0.01f, MotionPrefs.Duration(_placeDuration)));
+                UpdateFlyer();
+                if (_flyT >= 1f) Land();
+            }
+
+            if (_punch > 0f && _stack != null)
+            {
+                _punch = Mathf.Max(0f, _punch - dt / 0.28f);
+                float s = 1f + 0.045f * Mathf.Sin(_punch * Mathf.PI);
+                _stack.localScale = new Vector3(s, s, 1f);
+            }
+
+            if (_phase != Phase.Idle) UpdateSettle(dt);
+        }
+
+        private void UpdateFlyer()
+        {
+            Vector2 to = new Vector2(0f, StackTop(_stackChips.Count));
+            float e = Ease.OutCubic(_flyT);
+            float hop = MotionPrefs.Amount(70f) * Mathf.Sin(e * Mathf.PI);
+            _flyer.rectTransform.anchoredPosition = Vector2.LerpUnclamped(_flyFrom, to, e) + new Vector2(0f, hop);
+            float scale = Mathf.Lerp(MotionPrefs.Reduced ? 1f : 0.86f, 1f, e);
+            _flyer.rectTransform.localScale = new Vector3(scale, scale, 1f);
+            _flyer.rectTransform.SetAsLastSibling();
+        }
+
+        private void Land()
+        {
+            _flying = false;
+            if (_flyer != null) _flyer.enabled = false;
+            _amount = _flyAmount;
+            Rebuild(_stack, _stackChips, ref _stackShadow, _amount);
+            Punch();
+            UiCues.Raise(UiCue.ChipPlace);
+        }
+
+        private void UpdateSettle(float dt = 0f)
+        {
+            _t += dt;
+            switch (_phase)
+            {
+                case Phase.PayoutIn:
+                {
+                    float d = MotionPrefs.Duration(_payoutDuration);
+                    float e = Ease.OutCubic(Mathf.Clamp01(_t / d));
+                    Vector2 from = _haveHomes ? (Vector2)_rect.InverseTransformPoint(_dealerWorld) : new Vector2(0f, 600f);
+                    Vector2 home = PayoutHome;
+                    _payout.anchoredPosition = Vector2.LerpUnclamped(from, home, e)
+                                               + new Vector2(0f, MotionPrefs.Amount(40f) * Mathf.Sin(e * Mathf.PI));
+                    if (_t >= d)
                     {
-                        _mode = Mode.Resting;
-                        _land = 1f;
+                        _payout.anchoredPosition = home;
+                        _phase = Phase.Hold;
+                        _t = 0f;
+                        UiCues.Raise(UiCue.ChipPlace);
                     }
-                    Apply();
-                    return;
+                    break;
+                }
 
-                case Mode.Resting:
-                    if (_land <= 0f) return;
-                    _land = Mathf.Max(0f, _land - Time.deltaTime / 0.3f);
-                    Apply();
-                    return;
+                case Phase.Hold:
+                    if (_t >= MotionPrefs.Duration(_payoutHold)) StartSweep(SettleKind.Return);
+                    break;
 
-                default:
-                    _t = Mathf.Min(1f, _t + Time.deltaTime / Mathf.Max(0.01f, _returnDuration));
-                    Apply();
-                    if (_t >= 1f) Hide();
-                    return;
+                case Phase.Sweep:
+                {
+                    float d = MotionPrefs.Duration(_sweepDuration);
+                    float k = Mathf.Clamp01(_t / d);
+                    // Ease-in: chips accelerate away, which reads as being swept, not placed.
+                    float e = Ease.InCubic(k) * 0.6f + k * 0.4f;
+                    float scale = Mathf.Lerp(1f, 0.55f, e);
+                    float alpha = 1f - Mathf.Clamp01((k - 0.5f) / 0.5f);
+
+                    _stack.anchoredPosition = Vector2.LerpUnclamped(Vector2.zero, _sweepTo, e);
+                    _stack.localScale = new Vector3(scale, scale, 1f);
+                    _stackGroup.alpha = alpha;
+
+                    if (_payoutChips.Count > 0 && _kind != SettleKind.Lose)
+                    {
+                        _payout.anchoredPosition = Vector2.LerpUnclamped(PayoutHome, _sweepTo, e);
+                        _payout.localScale = new Vector3(scale, scale, 1f);
+                        _payoutGroup.alpha = alpha;
+                    }
+
+                    if (k >= 1f)
+                    {
+                        _phase = Phase.Idle;
+                        _amount = 0;
+                        ResetRoots();
+                        Rebuild(_stack, _stackChips, ref _stackShadow, 0);
+                        Rebuild(_payout, _payoutChips, ref _payoutShadow, 0);
+                    }
+                    break;
+                }
             }
         }
 
-        private void Apply()
+        private Vector2 PayoutHome => new Vector2(_chipWidth * 0.98f, -_chipWidth * 0.06f);
+
+        private void ResetRoots()
         {
-            if (_rect == null) return;
+            if (_stack != null)
+            {
+                _stack.anchoredPosition = Vector2.zero;
+                _stack.localScale = Vector3.one;
+            }
+            if (_payout != null)
+            {
+                _payout.anchoredPosition = PayoutHome;
+                _payout.localScale = Vector3.one;
+            }
+            if (_stackGroup != null) _stackGroup.alpha = 1f;
+            if (_payoutGroup != null) _payoutGroup.alpha = 1f;
+        }
 
-            bool outbound = _mode == Mode.Placing;
-            Vector2 from = outbound ? _flightOrigin : _rest;
-            Vector2 to = outbound ? _rest : (_mode == Mode.Losing ? _loseTo : _flyFrom);
+        // =====================================================================
+        //  Stack building
+        // =====================================================================
 
-            // Ease-out on the way in so the chip decelerates onto its spot; ease-in on the
-            // way out so it accelerates away, which reads as being swept rather than placed.
-            float e = outbound
-                ? 1f - Mathf.Pow(1f - _t, 3f)
-                : _t * _t;
+        private float ChipHeight(Sprite sprite, float width) =>
+            sprite != null && sprite.rect.width > 0f ? width * sprite.rect.height / sprite.rect.width : width * 0.64f;
 
-            Vector2 straight = Vector2.LerpUnclamped(from, to, e);
-            Vector2 travel = to - from;
-            Vector2 perpendicular = new Vector2(-travel.y, travel.x).normalized;
-            _rect.anchoredPosition = straight + perpendicular * (_arc * Mathf.Sin(e * Mathf.PI));
+        /// <summary>Centre y of the chip that would sit at <paramref name="index"/>.</summary>
+        private float StackTop(int index) => index * _chipStep;
 
-            _rect.localRotation = Quaternion.Euler(0f, 0f, _spin * (outbound ? 1f - e : e));
+        private void Rebuild(RectTransform root, List<Image> pool, ref Image shadow, long amount)
+        {
+            // Chips are runtime objects; never write them into a scene being built in the editor.
+            if (root == null || _library == null || !Application.isPlaying) return;
 
-            float scale = outbound
-                ? Mathf.LerpUnclamped(_flyScale, 1f, e)
-                : Mathf.LerpUnclamped(1f, _flyScale, e);
-            if (_land > 0f) scale += _landOvershoot * _land * Mathf.Sin(_land * Mathf.PI);
-            _rect.localScale = new Vector3(scale, scale, 1f);
+            List<int> chips = TableText.Breakdown(amount, _denominations, _maxChips);
+            if (amount <= 0) chips.Clear();
 
-            // Fade only on the way out; the chip arrives fully solid.
-            if (_group != null && !outbound) _group.alpha = 1f - Mathf.Clamp01(e * 1.15f);
+            if (shadow == null && _library.Shadow != null)
+            {
+                var go = new GameObject("Shadow", typeof(RectTransform));
+                go.transform.SetParent(root, false);
+                shadow = go.AddComponent<Image>();
+                shadow.sprite = _library.Shadow;
+                shadow.raycastTarget = false;
+                shadow.color = new Color(0f, 0f, 0f, 0.85f);
+            }
+            if (shadow != null)
+            {
+                shadow.enabled = chips.Count > 0;
+                shadow.rectTransform.sizeDelta = new Vector2(_chipWidth * 1.3f, _chipWidth * 0.5f);
+                shadow.rectTransform.anchoredPosition = new Vector2(0f, -_chipWidth * 0.16f);
+                shadow.rectTransform.SetAsFirstSibling();
+            }
+
+            while (pool.Count < chips.Count)
+            {
+                var go = new GameObject($"Chip_{pool.Count:00}", typeof(RectTransform));
+                go.transform.SetParent(root, false);
+                var image = go.AddComponent<Image>();
+                image.raycastTarget = false;
+                image.preserveAspect = true;
+                pool.Add(image);
+            }
+
+            for (int i = 0; i < pool.Count; i++)
+            {
+                Image image = pool[i];
+                bool used = i < chips.Count;
+                image.enabled = used;
+                if (!used) continue;
+
+                // Bottom of the stack first, so higher chips draw over lower ones.
+                image.sprite = _library.Get(chips[i]).Side;
+                SizeChip(image, _chipWidth);
+                image.rectTransform.anchoredPosition = new Vector2(0f, StackTop(i));
+                image.rectTransform.SetAsLastSibling();
+            }
+        }
+
+        private void SizeChip(Image image, float width)
+        {
+            image.rectTransform.sizeDelta = new Vector2(width, ChipHeight(image.sprite, width));
         }
     }
 }

@@ -1,3 +1,4 @@
+using BlackjackGame.UI.Theme;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,8 +13,8 @@ namespace BlackjackGame.UI.Components
     public sealed class PulsingDot : MonoBehaviour
     {
         [Tooltip("Scale swing of the breath, as a fraction of resting size.")]
-        [SerializeField] private float _pulseAmount = 0.18f;
-        [SerializeField] private float _pulseSpeed = 3.4f;
+        [SerializeField] private float _pulseAmount = 0.12f;
+        [SerializeField] private float _pulseSpeed = 2.2f;
 
         private Image _image;
 
@@ -26,6 +27,11 @@ namespace BlackjackGame.UI.Components
 
         private void Update()
         {
+            if (MotionPrefs.Reduced)
+            {
+                transform.localScale = Vector3.one;
+                return;
+            }
             float s = 1f + _pulseAmount * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * _pulseSpeed));
             transform.localScale = new Vector3(s, s, 1f);
         }

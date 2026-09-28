@@ -1,4 +1,5 @@
 using BlackjackGame.Core;
+using BlackjackGame.UI.Presentation;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,7 +9,8 @@ namespace BlackjackGame.UI.Components
     /// <summary>
     /// Modal stats panel opened from the trophy icon on any screen. There is no server
     /// leaderboard, so this reflects the player's own local <c>PlayerData</c> — level,
-    /// hands played, win rate, blackjacks, and daily-reward streak.
+    /// hands played, win rate, blackjacks, and daily-reward streak. Each field is the value
+    /// half of a caption/value row; the captions are static text in the scene.
     /// </summary>
     public sealed class StatsPanel : MonoBehaviour
     {
@@ -41,11 +43,13 @@ namespace BlackjackGame.UI.Components
             if (!AppManager.Exists) return;
             var data = AppManager.Instance.Profile.Data;
 
-            if (_levelLabel != null) _levelLabel.text = $"Level {data.Level}";
-            if (_handsLabel != null) _handsLabel.text = $"Hands played: {data.HandsPlayed:N0}";
-            if (_winRateLabel != null) _winRateLabel.text = $"Win rate: {data.WinRate * 100f:0.#}%";
-            if (_blackjacksLabel != null) _blackjacksLabel.text = $"Blackjacks: {data.Blackjacks:N0}";
-            if (_streakLabel != null) _streakLabel.text = $"Daily streak: {data.DailyStreak}";
+            var culture = TableText.Culture;
+            if (_levelLabel != null) _levelLabel.text = data.Level.ToString(culture);
+            if (_handsLabel != null) _handsLabel.text = TableText.Chips(data.HandsPlayed);
+            if (_winRateLabel != null) _winRateLabel.text = (data.WinRate * 100f).ToString("0.#", culture) + "%";
+            if (_blackjacksLabel != null) _blackjacksLabel.text = TableText.Chips(data.Blackjacks);
+            if (_streakLabel != null)
+                _streakLabel.text = data.DailyStreak == 1 ? "1 day" : $"{data.DailyStreak.ToString(culture)} days";
         }
     }
 }

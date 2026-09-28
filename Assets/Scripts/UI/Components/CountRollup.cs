@@ -1,13 +1,14 @@
 using System.Globalization;
+using BlackjackGame.UI.Theme;
 using TMPro;
 using UnityEngine;
 
 namespace BlackjackGame.UI.Components
 {
     /// <summary>
-    /// Rolls a number up (or down) to its new value instead of snapping, and flashes the
-    /// label while it moves. A balance that visibly climbs after a win is the single
-    /// cheapest piece of reward feedback in a casino game.
+    /// Rolls a number up (or down) to its new value instead of snapping, with a faint tint
+    /// while it moves. A balance that visibly climbs after a win is the single cheapest
+    /// piece of reward feedback in a casino game — it only has to be seen, not shouted.
     ///
     /// Drive it with <see cref="SetValue"/>; it owns the label's text from then on.
     /// </summary>
@@ -18,14 +19,14 @@ namespace BlackjackGame.UI.Components
         [SerializeField] private string _format = "N0";
 
         [Tooltip("Seconds the roll takes, regardless of how large the jump is.")]
-        [SerializeField] private float _duration = 0.55f;
+        [SerializeField] private float _duration = 0.7f;
 
         [Header("Flash")]
         [Tooltip("Colour mixed in while the value is climbing. Alpha is ignored.")]
-        [SerializeField] private Color _gainFlash = new Color(0.45f, 1f, 0.55f);
+        [SerializeField] private Color _gainFlash = new Color(0.525f, 0.788f, 0.627f);
         [Tooltip("Colour mixed in while the value is falling.")]
-        [SerializeField] private Color _lossFlash = new Color(1f, 0.42f, 0.42f);
-        [SerializeField] private float _punchScale = 0.18f;
+        [SerializeField] private Color _lossFlash = new Color(0.839f, 0.486f, 0.439f);
+        [SerializeField] private float _punchScale = 0.035f;
 
         private TMP_Text _label;
         private Color _baseColor;
@@ -70,6 +71,7 @@ namespace BlackjackGame.UI.Components
             _target = value;
             _rising = _target > _from;
             _t = 0f;
+            if (MotionPrefs.Reduced) SnapTo(value);
         }
 
         /// <summary>Forces the display to a value with no animation.</summary>
@@ -99,7 +101,7 @@ namespace BlackjackGame.UI.Components
 
             // Flash and swell hardest at the start, settling back to normal.
             float intensity = 1f - _t;
-            _label.color = Color.Lerp(_baseColor, _rising ? _gainFlash : _lossFlash, intensity * 0.85f);
+            _label.color = Color.Lerp(_baseColor, _rising ? _gainFlash : _lossFlash, intensity * 0.7f);
             float s = 1f + _punchScale * intensity;
             _label.transform.localScale = new Vector3(s, s, 1f);
 

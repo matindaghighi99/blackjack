@@ -2,6 +2,7 @@ using System;
 using BlackjackGame.Core;
 using BlackjackGame.Economy;
 using BlackjackGame.UI.Components;
+using BlackjackGame.UI.Theme;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -87,16 +88,14 @@ namespace BlackjackGame.UI.Screens
             if (_rewardStatusLabel != null)
             {
                 _rewardStatusLabel.text = result.Success
-                    ? $"+{result.ChipsAwarded:N0} chips! Streak: {result.NewStreak}"
+                    ? $"+{result.ChipsAwarded:N0} chips  \u00B7  day {result.NewStreak} streak"
                     : NextRewardText(result.TimeUntilNext);
             }
 
-            // Gold slam on a successful claim; a flat grey nudge when it's not ready yet.
+            // Gold on a successful claim; a quiet nudge when it's not ready yet.
             if (_rewardPunch != null)
             {
-                _rewardPunch.Play(
-                    result.Success ? new Color(1f, 0.86f, 0.35f) : new Color(0.8f, 0.8f, 0.8f),
-                    result.Success ? 1f : 0.3f);
+                _rewardPunch.Play(result.Success ? Palette.Gold : Palette.Muted, result.Success ? 1f : 0.4f);
             }
 
             RefreshBalance();
@@ -126,7 +125,7 @@ namespace BlackjackGame.UI.Screens
             {
                 if (available)
                 {
-                    _rewardStatusLabel.text = "Daily reward ready!";
+                    _rewardStatusLabel.text = "Your daily reward is ready";
                 }
                 else
                 {
@@ -147,7 +146,7 @@ namespace BlackjackGame.UI.Screens
             }
 
             if (_rewardsRowSubtitle != null)
-                _rewardsRowSubtitle.text = available ? "READY TO CLAIM!" : "COME BACK TOMORROW";
+                _rewardsRowSubtitle.text = available ? "READY TO CLAIM" : "COME BACK TOMORROW";
         }
 
         private static string NextRewardText(TimeSpan wait)

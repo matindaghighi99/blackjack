@@ -9,43 +9,50 @@ using Object = UnityEngine.Object;
 namespace BlackjackGame.EditorTools
 {
     /// <summary>
-    /// Builds the TextMeshPro font assets and their gold material presets from the raw
-    /// font files in Assets/Fonts.
+    /// Builds the TextMeshPro font assets from the raw font files in Assets/Fonts.
     ///
-    /// Done in script rather than through <b>Window ▸ TextMeshPro ▸ Font Asset Creator</b>
-    /// so the whole look is reproducible: delete Assets/Settings/Fonts and re-run, and you
-    /// get byte-for-byte the same atlases and materials. Run via
+    /// Two families, five faces: EB Garamond (display serif — the wordmark, headlines, felt
+    /// print) and Inter (UI and every number; its figures are frozen to tabular so rolling
+    /// balances don't jitter — see art-source/prepare_fonts.py).
+    ///
+    /// Materials are left plain: colour comes from the palette at runtime (vertex colour),
+    /// so no per-colour material presets are needed. The only extra is a restrained gold
+    /// gradient reserved for the wordmark.
+    ///
+    /// Done in script rather than through the Font Asset Creator so the look is
+    /// reproducible: delete Assets/Settings/Fonts and re-run. Run via
     /// <b>Blackjack ▸ Rebuild Font Assets</b> or the command-line entry point.
     /// </summary>
     public static class FontAssetBuilder
     {
-        public const string DisplayFontPath = "Assets/Fonts/TeXGyreBonum-Bold.otf";
-        public const string BodyBoldFontPath = "Assets/Fonts/Lato-Bold.ttf";
-        public const string BodyFontPath = "Assets/Fonts/Lato-Regular.ttf";
+        public const string SerifFontPath = "Assets/Fonts/EBGaramond-Regular-Lining.otf";
+        public const string SerifItalicFontPath = "Assets/Fonts/EBGaramond-Italic-Lining.otf";
+        public const string SansFontPath = "Assets/Fonts/Inter-Regular-Tabular.otf";
+        public const string SansMediumFontPath = "Assets/Fonts/Inter-Medium-Tabular.otf";
+        public const string SansSemiBoldFontPath = "Assets/Fonts/Inter-SemiBold-Tabular.otf";
 
         private const string OutputFolder = "Assets/Settings/Fonts";
 
-        public const string DisplayAssetPath = OutputFolder + "/Display SDF.asset";
-        public const string BodyBoldAssetPath = OutputFolder + "/Body Bold SDF.asset";
-        public const string BodyAssetPath = OutputFolder + "/Body SDF.asset";
-
-        public const string GoldMaterialPath = OutputFolder + "/Display SDF - Gold.mat";
-        public const string GoldSmallMaterialPath = OutputFolder + "/Body Bold SDF - Gold.mat";
-        public const string InkMaterialPath = OutputFolder + "/Body SDF - Ink.mat";
+        public const string SerifAssetPath = OutputFolder + "/Serif SDF.asset";
+        public const string SerifItalicAssetPath = OutputFolder + "/Serif Italic SDF.asset";
+        public const string SansAssetPath = OutputFolder + "/Sans SDF.asset";
+        public const string SansMediumAssetPath = OutputFolder + "/Sans Medium SDF.asset";
+        public const string SansSemiBoldAssetPath = OutputFolder + "/Sans SemiBold SDF.asset";
 
         public const string GoldGradientPath = OutputFolder + "/Gold Gradient.asset";
 
-        // Matches the sampled palette in art-source/generate_ui_kit.py.
-        private static readonly Color GoldFace = new Color32(247, 226, 160, 255);
-        private static readonly Color GoldOutline = new Color32(74, 48, 12, 255);
-        private static readonly Color InkFace = new Color32(232, 224, 202, 255);
+        /// <summary>Every asset this builder produces; used by wiring verification.</summary>
+        public static readonly string[] AllOutputs =
+        {
+            SerifAssetPath, SerifItalicAssetPath, SansAssetPath, SansMediumAssetPath, SansSemiBoldAssetPath,
+            GoldGradientPath,
+        };
 
         [MenuItem("Blackjack/Rebuild Font Assets", priority = 10)]
         public static void RebuildMenu()
         {
             BuildAll();
-            EditorUtility.DisplayDialog("Blackjack",
-                "TextMeshPro font assets and gold materials rebuilt.", "Nice");
+            EditorUtility.DisplayDialog("Blackjack", "TextMeshPro font assets rebuilt.", "Done");
         }
 
         public static void BuildFromCommandLine()
@@ -63,32 +70,33 @@ namespace BlackjackGame.EditorTools
             }
         }
 
+        /// <summary>True when every output exists (the scene bootstrapper builds them if not).</summary>
+        public static bool AllBuilt()
+        {
+            foreach (string path in AllOutputs)
+                if (AssetDatabase.LoadAssetAtPath<Object>(path) == null) return false;
+            return true;
+        }
+
         public static void BuildAll()
         {
             EnsureFolder(OutputFolder);
 
-            // 90pt sampling with SDF gives clean edges from ~20px to ~200px, which covers
-            // everything from the subtitle rows to the wordmark.
-            TMP_FontAsset display = BuildFontAsset(DisplayFontPath, DisplayAssetPath, 90, 1024);
-            TMP_FontAsset bodyBold = BuildFontAsset(BodyBoldFontPath, BodyBoldAssetPath, 90, 1024);
-            TMP_FontAsset body = BuildFontAsset(BodyFontPath, BodyAssetPath, 90, 1024);
-
-            BuildMaterial(display, GoldMaterialPath, GoldFace, GoldOutline,
-                outlineWidth: 0.09f, bevel: true, glow: true);
-            BuildMaterial(bodyBold, GoldSmallMaterialPath, GoldFace, GoldOutline,
-                outlineWidth: 0.07f, bevel: false, glow: false);
-            BuildMaterial(body, InkMaterialPath, InkFace, new Color(0f, 0f, 0f, 0.55f),
-                outlineWidth: 0.05f, bevel: false, glow: false);
+            // 90pt sampling with SDF gives clean edges from ~16px captions to ~120px headlines.
+            BuildFontAsset(SerifFontPath, SerifAssetPath);
+            BuildFontAsset(SerifItalicFontPath, SerifItalicAssetPath);
+            BuildFontAsset(SansFontPath, SansAssetPath);
+            BuildFontAsset(SansMediumFontPath, SansMediumAssetPath);
+            BuildFontAsset(SansSemiBoldFontPath, SansSemiBoldAssetPath);
 
             BuildGoldGradient();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("[FontAssetBuilder] Built 3 font assets and 3 materials in " + OutputFolder);
+            Debug.Log("[FontAssetBuilder] Built 5 font assets in " + OutputFolder);
         }
 
-        private static TMP_FontAsset BuildFontAsset(string sourcePath, string assetPath,
-            int samplingPointSize, int atlasSize)
+        private static TMP_FontAsset BuildFontAsset(string sourcePath, string assetPath)
         {
             var font = AssetDatabase.LoadAssetAtPath<Font>(sourcePath);
             if (font == null)
@@ -98,17 +106,14 @@ namespace BlackjackGame.EditorTools
             // Dynamic population: glyphs are rasterised into the atlas on demand, so the
             // asset stays small and never misses a character we forgot to include.
             TMP_FontAsset asset = TMP_FontAsset.CreateFontAsset(
-                font, samplingPointSize, 9, GlyphRenderMode.SDFAA,
-                atlasSize, atlasSize, AtlasPopulationMode.Dynamic, true);
+                font, 90, 9, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
 
             if (asset == null)
                 throw new InvalidOperationException($"CreateFontAsset returned null for {sourcePath}");
 
             asset.name = Path.GetFileNameWithoutExtension(assetPath);
 
-            var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(assetPath);
-            if (existing != null) AssetDatabase.DeleteAsset(assetPath);
-
+            if (AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(assetPath) != null) AssetDatabase.DeleteAsset(assetPath);
             AssetDatabase.CreateAsset(asset, assetPath);
 
             // The atlas texture and material are sub-assets of the font asset.
@@ -133,84 +138,23 @@ namespace BlackjackGame.EditorTools
         }
 
         /// <summary>
-        /// A material preset derived from the font's own material. TMP keeps the face and
-        /// outline in shader properties, so the gold treatment is live — no baked sprites,
-        /// and it stays crisp at any size.
-        /// </summary>
-        private static void BuildMaterial(TMP_FontAsset fontAsset, string path,
-            Color face, Color outline, float outlineWidth, bool bevel, bool glow)
-        {
-            var material = new Material(fontAsset.material) { name = Path.GetFileNameWithoutExtension(path) };
-
-            material.SetColor(ShaderUtilities.ID_FaceColor, face);
-            material.SetColor(ShaderUtilities.ID_OutlineColor, outline);
-            material.SetFloat(ShaderUtilities.ID_OutlineWidth, outlineWidth);
-
-            // Soft drop shadow lifts text off the felt.
-            material.EnableKeyword(ShaderUtilities.Keyword_Underlay);
-            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.45f));
-            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.45f);
-            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.45f);
-            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.42f);
-
-            // Bevel and specular exist on TextMeshPro/Distance Field but not on the Mobile
-            // variants, and only ID_BevelAmount has a ShaderUtilities constant — the rest
-            // are looked up by name and skipped when the shader doesn't declare them.
-            if (bevel && material.HasProperty(ShaderUtilities.ID_BevelAmount))
-            {
-                material.EnableKeyword(ShaderUtilities.Keyword_Bevel);
-                material.SetFloat(ShaderUtilities.ID_BevelAmount, 0.45f);
-                material.SetFloat(ShaderUtilities.ID_LightAngle, Mathf.PI);
-                SetFloatIfPresent(material, "_BevelWidth", 0.10f);
-                SetFloatIfPresent(material, "_BevelRoundness", 0.35f);
-                SetFloatIfPresent(material, "_SpecularPower", 2.2f);
-                SetFloatIfPresent(material, "_Diffuse", 0.55f);
-                SetFloatIfPresent(material, "_Reflectivity", 8f);
-                SetColorIfPresent(material, "_SpecularColor", new Color32(255, 250, 224, 255));
-            }
-
-            if (glow && material.HasProperty(ShaderUtilities.ID_GlowColor))
-            {
-                material.EnableKeyword(ShaderUtilities.Keyword_Glow);
-                material.SetColor(ShaderUtilities.ID_GlowColor, new Color32(255, 214, 120, 90));
-                material.SetFloat(ShaderUtilities.ID_GlowPower, 0.25f);
-                material.SetFloat(ShaderUtilities.ID_GlowOuter, 0.12f);
-            }
-
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null) AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(material, path);
-            Debug.Log($"[FontAssetBuilder] {path}");
-        }
-
-        /// <summary>
-        /// Vertex-colour gradient applied on top of the face colour. TMP interpolates
-        /// bilinearly between four corners, so this gives the light-to-deep gold fall-off
-        /// that used to be baked into the label PNGs — but live, and crisp at any size.
+        /// A quiet metallic fall-off for the wordmark only: light gold at the top of the
+        /// letters to the accent gold at their feet. Everything else is a flat palette colour.
         /// </summary>
         private static void BuildGoldGradient()
         {
             var gradient = ScriptableObject.CreateInstance<TMP_ColorGradient>();
             gradient.name = "Gold Gradient";
-            gradient.topLeft = new Color32(255, 246, 206, 255);
-            gradient.topRight = new Color32(255, 240, 190, 255);
-            gradient.bottomLeft = new Color32(198, 150, 62, 255);
-            gradient.bottomRight = new Color32(214, 170, 84, 255);
+            gradient.colorMode = ColorMode.FourCornersGradient;
+            gradient.topLeft = new Color32(236, 214, 160, 255);
+            gradient.topRight = new Color32(231, 207, 150, 255);
+            gradient.bottomLeft = new Color32(186, 148, 80, 255);
+            gradient.bottomRight = new Color32(196, 158, 88, 255);
 
-            var existing = AssetDatabase.LoadAssetAtPath<TMP_ColorGradient>(GoldGradientPath);
-            if (existing != null) AssetDatabase.DeleteAsset(GoldGradientPath);
+            if (AssetDatabase.LoadAssetAtPath<TMP_ColorGradient>(GoldGradientPath) != null)
+                AssetDatabase.DeleteAsset(GoldGradientPath);
             AssetDatabase.CreateAsset(gradient, GoldGradientPath);
             Debug.Log($"[FontAssetBuilder] {GoldGradientPath}");
-        }
-
-        private static void SetFloatIfPresent(Material m, string property, float value)
-        {
-            if (m.HasProperty(property)) m.SetFloat(property, value);
-        }
-
-        private static void SetColorIfPresent(Material m, string property, Color value)
-        {
-            if (m.HasProperty(property)) m.SetColor(property, value);
         }
 
         private static void EnsureFolder(string folder)

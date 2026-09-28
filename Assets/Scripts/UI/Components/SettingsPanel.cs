@@ -1,4 +1,5 @@
 using BlackjackGame.Core;
+using BlackjackGame.UI.Theme;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,6 +20,9 @@ namespace BlackjackGame.UI.Components
         [SerializeField] private Button _closeButton;
         [SerializeField] private Button _muteButton;
         [SerializeField] private TMP_Text _muteLabel;
+        [Tooltip("Toggles MotionPrefs.Reduced — shorter, travel-free animation everywhere.")]
+        [SerializeField] private Button _motionButton;
+        [SerializeField] private TMP_Text _motionLabel;
         [SerializeField] private Button _resetButton;
         [SerializeField] private TMP_Text _resetLabel;
 
@@ -32,14 +36,17 @@ namespace BlackjackGame.UI.Components
             // Tapping outside the frame closes the panel — the gesture everyone tries first.
             if (_backdropButton != null) _backdropButton.onClick.AddListener(Hide);
             if (_muteButton != null) _muteButton.onClick.AddListener(ToggleMute);
+            if (_motionButton != null) _motionButton.onClick.AddListener(ToggleMotion);
             if (_resetButton != null) _resetButton.onClick.AddListener(OnResetClicked);
 
             ApplyMuteState(PlayerPrefs.GetInt(MutedPrefKey, 0) == 1);
+            RefreshMotionLabel();
         }
 
         public void Show()
         {
             DisarmReset();
+            RefreshMotionLabel();
             gameObject.SetActive(true);
         }
 
@@ -56,7 +63,19 @@ namespace BlackjackGame.UI.Components
             PlayerPrefs.SetInt(MutedPrefKey, muted ? 1 : 0);
             PlayerPrefs.Save();
             AudioListener.volume = muted ? 0f : 1f;
-            if (_muteLabel != null) _muteLabel.text = muted ? "Sound: Off" : "Sound: On";
+            if (_muteLabel != null) _muteLabel.text = muted ? "SOUND  ·  OFF" : "SOUND  ·  ON";
+        }
+
+        private void ToggleMotion()
+        {
+            MotionPrefs.Reduced = !MotionPrefs.Reduced;
+            RefreshMotionLabel();
+        }
+
+        private void RefreshMotionLabel()
+        {
+            if (_motionLabel != null)
+                _motionLabel.text = MotionPrefs.Reduced ? "REDUCE MOTION  ·  ON" : "REDUCE MOTION  ·  OFF";
         }
 
         private void OnResetClicked()
@@ -64,7 +83,7 @@ namespace BlackjackGame.UI.Components
             if (!_resetConfirmArmed)
             {
                 _resetConfirmArmed = true;
-                if (_resetLabel != null) _resetLabel.text = "Tap again to confirm";
+                if (_resetLabel != null) _resetLabel.text = "TAP AGAIN TO CONFIRM";
                 return;
             }
 
@@ -78,7 +97,7 @@ namespace BlackjackGame.UI.Components
         private void DisarmReset()
         {
             _resetConfirmArmed = false;
-            if (_resetLabel != null) _resetLabel.text = "Reset Progress";
+            if (_resetLabel != null) _resetLabel.text = "RESET PROGRESS";
         }
     }
 }
