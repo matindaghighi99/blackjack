@@ -742,8 +742,21 @@ namespace BlackjackGame.EditorTools
                 problems.Add($"{scene.name}: no Canvas.");
         }
 
+        /// <summary>
+        /// Reference fields a component can run without (it null-checks them or falls back), so
+        /// leaving them empty is intended rather than a wiring bug.
+        /// </summary>
+        private static readonly HashSet<string> OptionalFields = new HashSet<string>
+        {
+            "ButtonJuice._visual",    // falls back to the button's own transform
+            "ButtonJuice._highlight", // chips have no hover overlay
+            "ButtonJuice._focusRing",
+            "ButtonJuice._glow",      // only DEAL breathes
+        };
+
         private static void CollectUnassignedFields(Component component, string sceneName, List<string> problems)
         {
+            string typeName = component.GetType().Name;
             var so = new SerializedObject(component);
             SerializedProperty it = so.GetIterator();
             bool enterChildren = true;
@@ -751,8 +764,9 @@ namespace BlackjackGame.EditorTools
             {
                 enterChildren = false;
                 if (it.propertyType != SerializedPropertyType.ObjectReference) continue;
-                if (it.objectReferenceValue == null)
-                    problems.Add($"{sceneName}: {component.GetType().Name}.{it.propertyPath} is not assigned.");
+                if (it.objectReferenceValue != null) continue;
+                if (OptionalFields.Contains(typeName + "." + it.propertyPath)) continue;
+                problems.Add($"{sceneName}: {typeName}.{it.propertyPath} is not assigned ({component.name}).");
             }
         }
 
